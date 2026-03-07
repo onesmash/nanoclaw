@@ -1,14 +1,22 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
+import path from 'path';
 
-// Sentinel markers must match container-runner.ts
+// Sentinel markers must match process-runner.ts
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
+const AGENT_RUNNER_PATH = path.join(
+  process.cwd(),
+  'container',
+  'agent-runner',
+  'dist',
+  'index.js',
+);
+
 // Mock config
 vi.mock('./config.js', () => ({
-  CONTAINER_IMAGE: 'nanoclaw-agent:latest',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
   CONTAINER_TIMEOUT: 1800000, // 30min
   DATA_DIR: '/tmp/nanoclaw-test-data',
@@ -41,14 +49,10 @@ vi.mock('fs', async () => {
       readdirSync: vi.fn(() => []),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
+      cpSync: vi.fn(),
     },
   };
 });
-
-// Mock mount-security
-vi.mock('./mount-security.js', () => ({
-  validateAdditionalMounts: vi.fn(() => []),
-}));
 
 // Create a controllable fake ChildProcess
 function createFakeProcess() {
@@ -57,12 +61,14 @@ function createFakeProcess() {
     stdout: PassThrough;
     stderr: PassThrough;
     kill: ReturnType<typeof vi.fn>;
+    killed: boolean;
     pid: number;
   };
   proc.stdin = new PassThrough();
   proc.stdout = new PassThrough();
   proc.stderr = new PassThrough();
   proc.kill = vi.fn();
+  proc.killed = false;
   proc.pid = 12345;
   return proc;
 }
@@ -76,16 +82,11 @@ vi.mock('child_process', async () => {
   return {
     ...actual,
     spawn: vi.fn(() => fakeProc),
-    exec: vi.fn(
-      (_cmd: string, _opts: unknown, cb?: (err: Error | null) => void) => {
-        if (cb) cb(null);
-        return new EventEmitter();
-      },
-    ),
   };
 });
 
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import { runContainerAgent, ContainerOutput } from './process-runner.js';
+import { spawn } from 'child_process';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -110,7 +111,43 @@ function emitOutputMarker(
   proc.stdout.push(`${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`);
 }
 
-describe('container-runner timeout behavior', () => {
+describe('process-runner spawn behavior', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeProc = createFakeProcess();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('spawns node with the agent-runner path (not docker)', async () => {
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+    );
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'Done',
+      newSessionId: 'session-1',
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    expect(spawn).toHaveBeenCalledWith(
+      'node',
+      [AGENT_RUNNER_PATH],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+    );
+  });
+});
+
+describe('process-runner timeout behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     fakeProc = createFakeProcess();
@@ -142,7 +179,7 @@ describe('container-runner timeout behavior', () => {
     // Fire the hard timeout (IDLE_TIMEOUT + 30s = 1830000ms)
     await vi.advanceTimersByTimeAsync(1830000);
 
-    // Emit close event (as if container was stopped by the timeout)
+    // Emit close event (as if process was killed by the timeout)
     fakeProc.emit('close', 137);
 
     // Let the promise resolve
