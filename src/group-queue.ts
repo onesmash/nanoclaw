@@ -358,8 +358,8 @@ export class GroupQueue {
     }
 
     logger.info(
-      { activeCount: this.activeCount, detachedContainers: activeContainers },
-      'GroupQueue shutting down (containers detached, not killed)',
+      { activeCount: this.activeCount, detachedProcesses: activeContainers },
+      'GroupQueue shutting down (processes detached, not killed)',
     );
   }
 }
