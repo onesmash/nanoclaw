@@ -8,12 +8,12 @@
 
 - **BREAKING** 移除 SKILL.md 中的 Step 3（Container Runtime）全部内容：运行时选择、Docker 安装、Apple Container 转换检查、镜像构建验证
 - 删除 SKILL.md Step 2 中"Record APPLE_CONTAINER and DOCKER values for step 3"这一行
-- 删除 SKILL.md Step 7（Start Service）中 `DOCKER_GROUP_STALE=true` 的全部处理逻辑（此字段由 Docker 组权限问题触发，已不再相关）
+- 删除 SKILL.md Step 7（Start Service）中 `DOCKER_GROUP_STALE=true` 的全部处理逻辑
 - 将 SKILL.md 步骤重新编号（原 4→3、5→4、6→5、7→6、8→7）
-- 更新 SKILL.md 故障排查区块：移除"Container agent fails"关于容器运行时的内容，改为进程日志参考（`process-*.log`）
+- 删除 SKILL.md 故障排查区块中"Container agent fails"条目（不替换）
 - 删除 `setup/container.ts`（死代码：`Dockerfile` 和 `build.sh` 已删除）
 - 更新 `setup/index.ts`：从 `STEPS` 注册表移除 `container` 条目
-- 清理 `setup/environment.ts`：移除 Docker 和 Apple Container 检测逻辑（这两个字段不再被任何调用方使用）
+- 清理 `setup/environment.ts`：移除 Docker 和 Apple Container 检测逻辑及对应状态字段
 
 ## Impact
 
