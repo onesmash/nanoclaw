@@ -122,11 +122,7 @@ describe('process-runner spawn behavior', () => {
   });
 
   it('spawns node with the agent-runner path (not docker)', async () => {
-    const resultPromise = runContainerAgent(
-      testGroup,
-      testInput,
-      () => {},
-    );
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
 
     emitOutputMarker(fakeProc, {
       status: 'success',

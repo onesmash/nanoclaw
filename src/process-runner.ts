@@ -60,13 +60,15 @@ function buildEnv(
 
   const env: Record<string, string> = {
     ...Object.fromEntries(
-      Object.entries(process.env).filter(
-        ([, v]) => v !== undefined,
-      ) as [string, string][],
+      Object.entries(process.env).filter(([, v]) => v !== undefined) as [
+        string,
+        string,
+      ][],
     ),
     NANOCLAW_GROUP_DIR: groupDir,
     NANOCLAW_IPC_DIR: ipcDir,
     NANOCLAW_GLOBAL_DIR: globalDir,
+    NANOCLAW_IDENTITY_PATH: path.join(GROUPS_DIR, 'main', 'IDENTITY.md'),
     HOME: homeDir,
     TZ: TIMEZONE,
   };
@@ -95,7 +97,12 @@ function prepareGroupDirs(group: RegisteredGroup): void {
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
+  const groupSessionsDir = path.join(
+    DATA_DIR,
+    'sessions',
+    group.folder,
+    '.claude',
+  );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
 
   const settingsFile = path.join(groupSessionsDir, 'settings.json');

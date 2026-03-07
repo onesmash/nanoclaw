@@ -398,6 +398,13 @@ async function runQuery(
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
   }
 
+  // Load IDENTITY.md and inject into system prompt
+  const identityPath = process.env.NANOCLAW_IDENTITY_PATH ?? '/workspace/identity.md';
+  let identityContent: string | undefined;
+  if (fs.existsSync(identityPath)) {
+    identityContent = fs.readFileSync(identityPath, 'utf-8');
+  }
+
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
   const extraDirs: string[] = [];
@@ -421,9 +428,12 @@ async function runQuery(
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
-        : undefined,
+      systemPrompt: (() => {
+        const parts = [identityContent, globalClaudeMd].filter(Boolean);
+        return parts.length > 0
+          ? { type: 'preset' as const, preset: 'claude_code' as const, append: parts.join('\n\n') }
+          : undefined;
+      })(),
       allowedTools: [
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',

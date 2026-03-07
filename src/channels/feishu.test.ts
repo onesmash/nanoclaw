@@ -83,7 +83,9 @@ import { FeishuChannel, FeishuChannelOpts } from './feishu.js';
 
 // --- Helpers ---
 
-function createTestOpts(overrides?: Partial<FeishuChannelOpts>): FeishuChannelOpts {
+function createTestOpts(
+  overrides?: Partial<FeishuChannelOpts>,
+): FeishuChannelOpts {
   return {
     onMessage: vi.fn(),
     onChatMetadata: vi.fn(),

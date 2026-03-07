@@ -23,10 +23,11 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
 | `src/types.ts` | TypeScript interfaces (includes `Channel`) |
-| `.env` | `ASSISTANT_NAME`, API keys, channel credentials |
+| `.env` | API keys, channel credentials |
+| `groups/main/IDENTITY.md` | Who the assistant IS: name, creature, vibe (style/personality), emoji, avatar |
 | `src/db.ts` | Database initialization and queries |
-| `groups/global/CLAUDE.md` | Global memory/persona (applies to all groups) |
-| `groups/{folder}/CLAUDE.md` | Per-group memory/persona |
+| `groups/global/CLAUDE.md` | What the assistant DOES: behavioral rules and instructions (applies to all groups) |
+| `groups/{folder}/CLAUDE.md` | Per-group behavioral rules and instructions |
 
 ## Common Customization Patterns
 
@@ -68,42 +69,52 @@ Questions to ask:
 - What aspect? (name, trigger, persona, response style)
 - Apply to all groups or specific ones?
 
-#### Changing the Assistant Name
+#### Changing Identity, Style, or Vibe
 
-The assistant name is read from `ASSISTANT_NAME` in `.env`. Changing it requires updating both the environment and the trigger patterns stored in the database, then clearing existing sessions so the agent adopts the new name.
+The assistant's character is defined in `groups/main/IDENTITY.md`. It contains: **Name**, **Emoji**, **Creature**, **Vibe**, and **Avatar**.
 
-Full procedure:
-1. Update `.env`: `ASSISTANT_NAME=NewName`
-2. Sync to container environment: `cp .env data/env/env`
-3. Update trigger patterns in the database:
-   ```bash
-   sqlite3 store/messages.db "UPDATE registered_groups SET trigger_pattern = '@NewName' WHERE trigger_pattern = '@OldName';"
-   ```
-4. **Stop the service** (required — running service will re-write old session ID):
+- **`Vibe`** — the assistant's personality and response style (e.g. "sharp, resourceful, a bit chaotic")
+- **`Creature`** — the archetype/persona (e.g. "AI familiar", "dragon", "fox")
+- **`Emoji`** / **`Avatar`** — visual identity
+
+**Changing style, vibe, or character** (session clear only):
+
+1. Edit `groups/main/IDENTITY.md` — update `Vibe`, `Creature`, `Emoji`, or `Avatar`
+2. Stop the service:
    ```bash
    launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
    # Linux: systemctl --user stop nanoclaw
    ```
-5. Clear sessions for affected groups:
+3. Clear sessions for affected groups:
    ```bash
    sqlite3 store/messages.db "DELETE FROM sessions WHERE group_folder = '{folder}';"
    rm -rf data/sessions/{folder}/.claude
    ```
-6. Restart the service:
+4. Restart the service:
    ```bash
    launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
    # Linux: systemctl --user start nanoclaw
    ```
 
-> ⚠️ If you only update `.env` and `CLAUDE.md` without clearing sessions, the agent will keep responding with the old name. The Claude SDK resumes from cached session history, which has the old persona baked in.
+**Changing Name** (requires DB update + session clear):
 
-#### Changing Persona / Response Style
+1. Edit `groups/main/IDENTITY.md` — update the `Name` field
+2. Update trigger patterns in the database:
+   ```bash
+   sqlite3 store/messages.db "UPDATE registered_groups SET trigger_pattern = '@NewName' WHERE trigger_pattern = '@OldName';"
+   ```
+3. Follow steps 2–4 above (stop service, clear sessions, restart)
 
-There are two persona files:
+> ⚠️ If you change the Name without clearing sessions, the agent will keep responding with the old name. The Claude SDK resumes from cached session history, which has the old persona baked in.
+
+#### Changing Behavioral Rules
+
+Use `CLAUDE.md` only when changing **what the assistant does** — instructions, capabilities, response format rules, tool guidance, or group-specific behavior. This is distinct from the assistant's character or vibe.
+
 - `groups/global/CLAUDE.md` — applies to **all groups**
 - `groups/{folder}/CLAUDE.md` — applies to that **specific group only**
 
-After editing either file, clear the affected group's session (same steps 4–6 above) so the agent starts fresh with the new persona.
+After editing either file, clear the affected group's session (same steps 2–4 above) so the agent starts fresh with the updated rules.
 
 #### Per-group behavior
 
