@@ -19,29 +19,37 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
+| `src/channels/registry.ts` | Channel self-registration (`registerChannel`) |
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
-| `src/types.ts` | TypeScript interfaces (includes Channel) |
-| `src/config.ts` | Assistant name, trigger pattern, directories |
+| `src/types.ts` | TypeScript interfaces (includes `Channel`) |
+| `.env` | `ASSISTANT_NAME`, API keys, channel credentials |
 | `src/db.ts` | Database initialization and queries |
-| `src/whatsapp-auth.ts` | Standalone WhatsApp authentication script |
-| `groups/CLAUDE.md` | Global memory/persona |
+| `groups/global/CLAUDE.md` | Global memory/persona (applies to all groups) |
+| `groups/{folder}/CLAUDE.md` | Per-group memory/persona |
 
 ## Common Customization Patterns
 
-### Adding a New Input Channel (e.g., Telegram, Slack, Email)
+### Adding a New Input Channel (e.g., Feishu, Telegram, Slack, Discord)
 
 Questions to ask:
-- Which channel? (Telegram, Slack, Discord, email, SMS, etc.)
+- Which channel? (Feishu, Telegram, Slack, Discord, email, etc.)
 - Same trigger word or different?
 - Same memory hierarchy or separate?
 - Should messages from this channel go to existing groups or new ones?
 
-Implementation pattern:
-1. Create `src/channels/{name}.ts` implementing the `Channel` interface from `src/types.ts` (see `src/channels/whatsapp.ts` for reference)
-2. Add the channel instance to `main()` in `src/index.ts` and wire callbacks (`onMessage`, `onChatMetadata`)
-3. Messages are stored via the `onMessage` callback; routing is automatic via `ownsJid()`
+Implementation pattern (preferred — use the skills engine):
+1. Check if a pre-built skill exists: `.claude/skills/add-{channel}/`
+2. If yes, apply it: `npx tsx scripts/apply-skill.ts .claude/skills/add-{channel}`
+3. This automatically adds the channel file, registers it, installs dependencies, and records the state
+4. Validate: `npm test && npm run build`
+5. Add credentials to `.env` and sync: `cp .env data/env/env`
+6. Register the chat group in the database (see Phase 4 of the channel skill)
+
+Fallback (no pre-built skill — manual pattern):
+1. Create `src/channels/{name}.ts` implementing the `Channel` interface from `src/types.ts`
+2. Call `registerChannel('{name}', (opts) => ...)` from `src/channels/registry.ts` — channels self-register at startup when credentials are present; no manual wiring in `main()` required
+3. Add `import './{name}.js'` to `src/channels/index.ts`
 
 ### Adding a New MCP Integration
 
@@ -60,9 +68,46 @@ Questions to ask:
 - What aspect? (name, trigger, persona, response style)
 - Apply to all groups or specific ones?
 
-Simple changes → edit `src/config.ts`
-Persona changes → edit `groups/CLAUDE.md`
-Per-group behavior → edit specific group's `CLAUDE.md`
+#### Changing the Assistant Name
+
+The assistant name is read from `ASSISTANT_NAME` in `.env`. Changing it requires updating both the environment and the trigger patterns stored in the database, then clearing existing sessions so the agent adopts the new name.
+
+Full procedure:
+1. Update `.env`: `ASSISTANT_NAME=NewName`
+2. Sync to container environment: `cp .env data/env/env`
+3. Update trigger patterns in the database:
+   ```bash
+   sqlite3 store/messages.db "UPDATE registered_groups SET trigger_pattern = '@NewName' WHERE trigger_pattern = '@OldName';"
+   ```
+4. **Stop the service** (required — running service will re-write old session ID):
+   ```bash
+   launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+   # Linux: systemctl --user stop nanoclaw
+   ```
+5. Clear sessions for affected groups:
+   ```bash
+   sqlite3 store/messages.db "DELETE FROM sessions WHERE group_folder = '{folder}';"
+   rm -rf data/sessions/{folder}/.claude
+   ```
+6. Restart the service:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+   # Linux: systemctl --user start nanoclaw
+   ```
+
+> ⚠️ If you only update `.env` and `CLAUDE.md` without clearing sessions, the agent will keep responding with the old name. The Claude SDK resumes from cached session history, which has the old persona baked in.
+
+#### Changing Persona / Response Style
+
+There are two persona files:
+- `groups/global/CLAUDE.md` — applies to **all groups**
+- `groups/{folder}/CLAUDE.md` — applies to that **specific group only**
+
+After editing either file, clear the affected group's session (same steps 4–6 above) so the agent starts fresh with the new persona.
+
+#### Per-group behavior
+
+Edit the specific group's `CLAUDE.md` at `groups/{folder}/CLAUDE.md`.
 
 ### Adding New Commands
 
@@ -103,8 +148,8 @@ launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
 
 User: "Add Telegram as an input channel"
 
-1. Ask: "Should Telegram use the same @Andy trigger, or a different one?"
-2. Ask: "Should Telegram messages create separate conversation contexts, or share with WhatsApp groups?"
-3. Create `src/channels/telegram.ts` implementing the `Channel` interface (see `src/channels/whatsapp.ts`)
-4. Add the channel to `main()` in `src/index.ts`
-5. Tell user how to authenticate and test
+1. Ask: "Should Telegram use the same @{ASSISTANT_NAME} trigger, or a different one?"
+2. Ask: "Should Telegram messages share memory with existing groups, or use a separate folder?"
+3. Apply the skill: `npx tsx scripts/apply-skill.ts .claude/skills/add-telegram`
+4. Configure credentials in `.env` and sync to `data/env/env`
+5. Tell user how to authenticate (QR code / bot token) and register a chat
