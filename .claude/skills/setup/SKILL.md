@@ -30,15 +30,27 @@ Run `npx tsx setup/index.ts --step environment` and parse the status block.
 - If HAS_AUTH=true → WhatsApp is already configured, note for step 4
 - If HAS_REGISTERED_GROUPS=true → note existing config, offer to skip or reconfigure
 
-## 3. Claude Authentication (No Script)
+## 3. Claude Authentication (Optional)
 
-If HAS_ENV=true from step 2, read `.env` and check for `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. If present, confirm with user: keep or reconfigure?
+Check if claude CLI is already logged in by running `claude auth status`. Parse the JSON output.
 
-AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key?
+If `loggedIn: true` → Inform user they can skip API key configuration. NanoClaw will automatically use their claude CLI session.
 
-**Subscription:** Tell user to run `claude setup-token` in another terminal, copy the token, add `CLAUDE_CODE_OAUTH_TOKEN=<token>` to `.env`. Do NOT collect the token in chat.
+If `loggedIn: false` or command fails → Offer two options:
 
-**API key:** Tell user to add `ANTHROPIC_API_KEY=<key>` to `.env`.
+AskUserQuestion: How would you like to authenticate?
+1. **Use claude CLI** (recommended for personal use): Run `claude login` now
+2. **Use API key** (recommended for production/team): Configure `ANTHROPIC_API_KEY` in `.env`
+
+**Option 1 (claude CLI):**
+- Tell user to run `claude login` in another terminal
+- After login completes, verify with `claude auth status`
+- No `.env` configuration needed
+
+**Option 2 (API key):**
+- Tell user to add `ANTHROPIC_API_KEY=<key>` to `.env`
+
+**Note:** If `.env` already has `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, confirm with user: keep or reconfigure?
 
 ## 4. Set Up Channels
 

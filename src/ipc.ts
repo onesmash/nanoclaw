@@ -8,6 +8,7 @@ import { AvailableGroup } from './process-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
+import { formatOutbound } from './router.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -80,11 +81,19 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  await deps.sendMessage(data.chatJid, data.text);
-                  logger.info(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'IPC message sent',
-                  );
+                  const formattedText = formatOutbound(data.text);
+                  if (formattedText) {
+                    await deps.sendMessage(data.chatJid, formattedText);
+                    logger.info(
+                      { chatJid: data.chatJid, sourceGroup },
+                      'IPC message sent',
+                    );
+                  } else {
+                    logger.debug(
+                      { chatJid: data.chatJid, sourceGroup },
+                      'IPC message was empty after stripping internal tags, skipped',
+                    );
+                  }
                 } else {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },

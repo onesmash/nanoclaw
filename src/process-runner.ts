@@ -82,14 +82,22 @@ function buildEnv(
 /**
  * Read allowed secrets from .env for passing to the process via stdin.
  * Secrets are never written to disk or exposed as environment variables.
+ * All secrets are now OPTIONAL - if not provided, Agent SDK will use claude CLI session.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile([
+  const secrets = readEnvFile([
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_API_KEY',
     'ANTHROPIC_BASE_URL',
     'ANTHROPIC_AUTH_TOKEN',
   ]);
+
+  // Only return credentials that actually exist and are non-empty
+  return Object.fromEntries(
+    Object.entries(secrets).filter(
+      ([_, value]) => value !== undefined && value !== '',
+    ),
+  );
 }
 
 const USER_MD_TEMPLATE = `# USER.md — About Your Human

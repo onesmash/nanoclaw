@@ -34,6 +34,27 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 > **Note:** Commands prefixed with `/` (like `/setup`, `/add-whatsapp`) are [Claude Code skills](https://code.claude.com/docs/en/skills). Type them inside the `claude` CLI prompt, not in your regular terminal.
 
+## Authentication
+
+NanoClaw supports three authentication methods (in priority order):
+
+1. **API Key** (recommended for production): Set `ANTHROPIC_API_KEY` in `.env`
+2. **Auth Token**: Set `ANTHROPIC_AUTH_TOKEN` in `.env`
+3. **Claude CLI Session** (recommended for personal use): Run `claude login`
+
+For personal use, the easiest way is to use your existing Claude subscription:
+
+```bash
+claude login  # Login with your claude.ai account
+```
+
+Then NanoClaw will automatically use your authenticated session - no API key needed!
+
+**Which method should I use?**
+- **Personal use**: Use `claude login` (easiest, uses your existing subscription)
+- **Production/Team**: Use `ANTHROPIC_API_KEY` (more control, separate billing)
+- **Testing**: Either method works
+
 ## Philosophy
 
 **Small enough to understand.** One process, a few source files and no microservices. If you want to understand the full NanoClaw codebase, just ask Claude Code to walk you through it.
@@ -173,6 +194,15 @@ This allows you to use:
 - Custom model deployments with Anthropic-compatible APIs
 
 Note: The model must support the Anthropic API format for best compatibility.
+
+**Do I need an API key?**
+
+No! If you have a Claude Pro or Max subscription, you can use your existing account:
+
+1. Run `claude login` in your terminal
+2. Start NanoClaw - it will automatically use your authenticated session
+
+API keys are optional and recommended for production deployments or team use.
 
 **How do I debug issues?**
 
