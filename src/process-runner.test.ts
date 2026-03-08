@@ -17,6 +17,7 @@ const AGENT_RUNNER_PATH = path.join(
 
 // Mock config
 vi.mock('./config.js', () => ({
+  AGENT_BACKEND: 'claude',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
   CONTAINER_TIMEOUT: 1800000, // 30min
   DATA_DIR: '/tmp/nanoclaw-test-data',
