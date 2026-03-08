@@ -7,7 +7,7 @@ import { getAssistantName } from './identity.js';
 // Read config values from .env (falls back to process.env).
 // Secrets are NOT read here — they stay on disk and are loaded only
 // in process-runner.ts to avoid leaking to child processes.
-const envConfig = readEnvFile(['ASSISTANT_HAS_OWN_NUMBER']);
+const envConfig = readEnvFile(['ASSISTANT_HAS_OWN_NUMBER', 'AGENT_BACKEND']);
 
 export const ASSISTANT_NAME = getAssistantName();
 export const ASSISTANT_HAS_OWN_NUMBER =
@@ -57,3 +57,8 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+export const AGENT_BACKEND: 'claude' | 'cursor' =
+  (process.env.AGENT_BACKEND || envConfig.AGENT_BACKEND) === 'cursor'
+    ? 'cursor'
+    : 'claude';

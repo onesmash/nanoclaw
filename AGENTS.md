@@ -20,7 +20,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **nanoclaw-office** (739 symbols, 1611 relationships, 49 execution flows).
+This project is indexed by GitNexus as **nanoclaw-office** (695 symbols, 1541 relationships, 47 execution flows).
 
 ## Always Start Here
 
@@ -28,7 +28,7 @@ This project is indexed by GitNexus as **nanoclaw-office** (739 symbols, 1611 re
 2. **Match your task to a skill below** and **read that skill file**
 3. **Follow the skill's workflow and checklist**
 
-> If step 1 warns the index is stale, run `npx gitnexus analyze` in the terminal first.
+> If step 1 warns the index is stale, run `gitnexus analyze` in the terminal first.
 
 ## Skills
 
