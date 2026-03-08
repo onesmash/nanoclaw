@@ -13,6 +13,7 @@ import {
   getChannelFactory,
   getRegisteredChannelNames,
 } from './channels/registry.js';
+import { checkAuthentication } from './auth-check.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -454,6 +455,28 @@ function recoverPendingMessages(): void {
 }
 
 async function main(): Promise<void> {
+  // Check authentication before starting
+  const auth = await checkAuthentication();
+  if (auth.method === 'none') {
+    console.error('✗ No authentication credentials found');
+    console.error('✗ claude CLI not logged in\n');
+    console.error('Please choose an authentication method:');
+    console.error('1. Run: claude login');
+    console.error('2. Or configure in .env: ANTHROPIC_API_KEY=sk-ant-xxx');
+    process.exit(1);
+  }
+
+  const authMethodDisplay = {
+    api_key: 'ANTHROPIC_API_KEY',
+    auth_token: 'ANTHROPIC_AUTH_TOKEN',
+    claude_cli: 'claude CLI session',
+    none: 'none',
+  };
+
+  logger.info(
+    `Using ${authMethodDisplay[auth.method]} authentication${auth.info ? ` (${auth.info})` : ''}`,
+  );
+
   initDatabase();
   logger.info('Database initialized');
   loadState();
