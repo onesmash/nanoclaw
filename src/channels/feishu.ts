@@ -53,6 +53,11 @@ export class FeishuChannel implements Channel {
   private wsClient: Lark.WSClient | null = null;
   private botOpenId: string | null = null;
   private opts: FeishuChannelOpts;
+  private lastMessageIdByJid: Record<string, string> = {};
+  private lastReactionIdByJid: Record<
+    string,
+    { messageId: string; reactionId: string }
+  > = {};
   private appId: string;
   private appSecret: string;
 
@@ -152,6 +157,7 @@ export class FeishuChannel implements Channel {
       return;
     }
 
+    this.lastMessageIdByJid[jid] = msgId;
     this.opts.onMessage(jid, {
       id: msgId,
       chat_jid: jid,
@@ -204,8 +210,41 @@ export class FeishuChannel implements Channel {
     logger.info('Feishu bot stopped');
   }
 
-  async setTyping(_jid: string, _isTyping: boolean): Promise<void> {
-    // Feishu has no standalone typing indicator API
+  async setTyping(jid: string, isTyping: boolean): Promise<void> {
+    if (!this.client) return;
+    const messageId = this.lastMessageIdByJid[jid];
+    if (!messageId) return;
+
+    if (isTyping) {
+      try {
+        const res = await this.client.im.messageReaction.create({
+          path: { message_id: messageId },
+          data: { reaction_type: { emoji_type: 'Typing' } },
+        });
+        const reactionId = (res as any)?.data?.reaction_id;
+        if (reactionId) {
+          this.lastReactionIdByJid[jid] = { messageId, reactionId };
+        }
+      } catch (err) {
+        logger.debug({ jid, err }, 'Feishu: failed to add typing reaction');
+      }
+    } else {
+      const reaction = this.lastReactionIdByJid[jid];
+      delete this.lastReactionIdByJid[jid];
+      delete this.lastMessageIdByJid[jid];
+      if (reaction) {
+        try {
+          await this.client.im.messageReaction.delete({
+            path: {
+              message_id: reaction.messageId,
+              reaction_id: reaction.reactionId,
+            },
+          });
+        } catch (err) {
+          logger.debug({ jid, err }, 'Feishu: failed to remove typing reaction');
+        }
+      }
+    }
   }
 }
 

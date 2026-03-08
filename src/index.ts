@@ -222,6 +222,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
     if (result.status === 'success') {
       queue.notifyIdle(chatJid);
+      await channel.setTyping?.(chatJid, false);
     }
 
     if (result.status === 'error') {
