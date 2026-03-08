@@ -42,8 +42,8 @@ agents-sdk-docs
 .claude/skills/brainstorming
 .claude/skills/gitnexus
 
-# Channels - only track registry; others come from skills
-src/channels/
+# Channels - only track registry and index; others come from skills
+src/channels/*
 !src/channels/index.ts
 !src/channels/registry.ts
 !src/channels/registry.test.ts
