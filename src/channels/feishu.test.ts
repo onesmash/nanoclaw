@@ -22,6 +22,10 @@ vi.mock('../logger.js', () => ({
 type MessageHandler = (data: any) => Promise<void>;
 
 const wsClientRef = vi.hoisted(() => ({ current: null as any }));
+const reactionMocks = vi.hoisted(() => ({
+  create: vi.fn().mockResolvedValue({ data: { reaction_id: 'rxn_mock_001' } }),
+  delete: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock('@larksuiteoapi/node-sdk', () => {
   class MockClient {
@@ -46,6 +50,10 @@ vi.mock('@larksuiteoapi/node-sdk', () => {
     im = {
       message: {
         create: vi.fn().mockResolvedValue({ data: {} }),
+      },
+      messageReaction: {
+        create: reactionMocks.create,
+        delete: reactionMocks.delete,
       },
     };
   }
@@ -499,15 +507,75 @@ describe('FeishuChannel', () => {
   // --- setTyping ---
 
   describe('setTyping', () => {
-    it('silently ignores typing calls (no Feishu typing API)', async () => {
+    it('silently ignores when no cached message (e.g. before any message)', async () => {
       const opts = createTestOpts();
       const channel = new FeishuChannel('app_id', 'app_secret', opts);
       await channel.connect();
 
-      // Should not throw
       await expect(
         channel.setTyping('fs:oc_group_id_001', true),
       ).resolves.toBeUndefined();
+      expect(reactionMocks.create).not.toHaveBeenCalled();
+    });
+
+    it('adds Typing reaction when message cached, removes when done', async () => {
+      const opts = createTestOpts();
+      const channel = new FeishuChannel('app_id', 'app_secret', opts);
+      await channel.connect();
+
+      const event = makeEvent({
+        chatType: 'group',
+        chatId: 'oc_group_id_001',
+        content: '@Andy hello',
+      });
+      await triggerMessage(channel, event);
+
+      await channel.setTyping('fs:oc_group_id_001', true);
+      expect(reactionMocks.create).toHaveBeenCalledWith({
+        path: { message_id: 'msg_001' },
+        data: { reaction_type: { emoji_type: 'Typing' } },
+      });
+
+      await channel.setTyping('fs:oc_group_id_001', false);
+      expect(reactionMocks.delete).toHaveBeenCalledWith({
+        path: { message_id: 'msg_001', reaction_id: 'rxn_mock_001' },
+      });
+    });
+
+    it('uses original message_id for delete even when a new message arrives during processing', async () => {
+      const opts = createTestOpts();
+      const channel = new FeishuChannel('app_id', 'app_secret', opts);
+      await channel.connect();
+
+      // First message triggers the bot
+      const event1 = makeEvent({
+        chatType: 'group',
+        chatId: 'oc_group_id_001',
+        content: '@Andy hello',
+        msgId: 'msg_first',
+      });
+      await triggerMessage(channel, event1);
+
+      await channel.setTyping('fs:oc_group_id_001', true);
+      expect(reactionMocks.create).toHaveBeenCalledWith({
+        path: { message_id: 'msg_first' },
+        data: { reaction_type: { emoji_type: 'Typing' } },
+      });
+
+      // A second message arrives while the bot is still processing
+      const event2 = makeEvent({
+        chatType: 'group',
+        chatId: 'oc_group_id_001',
+        content: '@Andy follow-up',
+        msgId: 'msg_second',
+      });
+      await triggerMessage(channel, event2);
+
+      // setTyping(false) must still delete from msg_first, not msg_second
+      await channel.setTyping('fs:oc_group_id_001', false);
+      expect(reactionMocks.delete).toHaveBeenCalledWith({
+        path: { message_id: 'msg_first', reaction_id: 'rxn_mock_001' },
+      });
     });
   });
 
