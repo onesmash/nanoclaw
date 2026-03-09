@@ -643,7 +643,8 @@ describe('schedule_task heartbeat authorization', () => {
       {
         type: 'schedule_task',
         task_type: 'heartbeat',
-        prompt: 'Read HEARTBEAT.md. If nothing needs attention, reply HEARTBEAT_OK.',
+        prompt:
+          'Read HEARTBEAT.md. If nothing needs attention, reply HEARTBEAT_OK.',
         schedule_type: 'interval',
         schedule_value: '1800000',
         context_mode: 'group',
