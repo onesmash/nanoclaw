@@ -467,7 +467,9 @@ async function main(): Promise<void> {
     const cursorOk = await checkCursorCli();
     if (!cursorOk) {
       console.error('✗ Cursor agent CLI not found or not usable\n');
-      console.error('AGENT_BACKEND=cursor requires the Cursor agent CLI. Please:');
+      console.error(
+        'AGENT_BACKEND=cursor requires the Cursor agent CLI. Please:',
+      );
       console.error('1. Install Cursor and ensure the agent CLI is in PATH');
       console.error('2. Run: agent --version to verify');
       process.exit(1);
