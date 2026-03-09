@@ -21,6 +21,39 @@ import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
+const HEARTBEAT_TOKEN = 'HEARTBEAT_OK';
+const HEARTBEAT_ACK_MAX_CHARS = 300;
+
+/**
+ * Strip HEARTBEAT_OK from the start or end of a heartbeat reply.
+ * Returns empty string if the remaining content is ≤ HEARTBEAT_ACK_MAX_CHARS
+ * (treat as a silent acknowledgement). Returns the stripped text otherwise.
+ */
+export function stripHeartbeatOk(text: string): string {
+  const trimmed = text.trim();
+  // Strip markup wrappers like <b>HEARTBEAT_OK</b>
+  const unwrapped = trimmed.replace(/<[^>]+>/g, '').trim();
+
+  // Find and strip token from start or end
+  let stripped: string | null = null;
+  if (unwrapped.startsWith(HEARTBEAT_TOKEN)) {
+    stripped = unwrapped.slice(HEARTBEAT_TOKEN.length).trim();
+  } else if (unwrapped.endsWith(HEARTBEAT_TOKEN)) {
+    stripped = unwrapped.slice(0, -HEARTBEAT_TOKEN.length).trim();
+  }
+
+  // No token found — return original text unchanged
+  if (stripped === null) {
+    return text;
+  }
+
+  // Token found: silence short acks, deliver long alerts (token stripped)
+  if (stripped.length <= HEARTBEAT_ACK_MAX_CHARS) {
+    return '';
+  }
+  return stripped;
+}
+
 /**
  * Compute the next run time for a recurring task, anchored to the
  * task's scheduled time rather than Date.now() to prevent cumulative
@@ -113,6 +146,15 @@ async function runTask(
     (g) => g.folder === task.group_folder,
   );
 
+  // Heartbeat tasks are only allowed on the main group
+  if (task.task_type === 'heartbeat' && group?.isMain !== true) {
+    logger.warn(
+      { taskId: task.id, groupFolder: task.group_folder },
+      'Heartbeat task skipped: group is not main',
+    );
+    return;
+  }
+
   if (!group) {
     logger.error(
       { taskId: task.id, groupFolder: task.group_folder },
@@ -185,8 +227,14 @@ async function runTask(
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
-          // Forward result to user (sendMessage handles formatting)
-          await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          // For heartbeat tasks, filter HEARTBEAT_OK acknowledgements
+          const textToSend =
+            task.task_type === 'heartbeat'
+              ? stripHeartbeatOk(streamedOutput.result)
+              : streamedOutput.result;
+          if (textToSend) {
+            await deps.sendMessage(task.chat_jid, textToSend);
+          }
           scheduleClose();
         }
         if (streamedOutput.status === 'success') {
