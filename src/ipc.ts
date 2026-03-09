@@ -173,6 +173,7 @@ export async function processTaskIpc(
     groupFolder?: string;
     chatJid?: string;
     targetJid?: string;
+    task_type?: string;
     // For register_group
     jid?: string;
     name?: string;
@@ -256,6 +257,17 @@ export async function processTaskIpc(
           nextRun = date.toISOString();
         }
 
+        // Validate task_type; heartbeat only allowed from main group
+        const taskType =
+          data.task_type === 'heartbeat' ? 'heartbeat' : 'scheduled';
+        if (taskType === 'heartbeat' && !isMain) {
+          logger.warn(
+            { sourceGroup },
+            'Unauthorized heartbeat task creation attempt blocked',
+          );
+          break;
+        }
+
         const taskId =
           data.taskId ||
           `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -271,6 +283,7 @@ export async function processTaskIpc(
           schedule_type: scheduleType,
           schedule_value: data.schedule_value,
           context_mode: contextMode,
+          task_type: taskType,
           next_run: nextRun,
           status: 'active',
           created_at: new Date().toISOString(),

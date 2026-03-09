@@ -212,6 +212,108 @@ describe('parameterized SQL registration', () => {
   });
 });
 
+describe('heartbeat auto-creation on main group registration', () => {
+  let db: Database.Database;
+
+  function createFullDb(): Database.Database {
+    const d = new Database(':memory:');
+    d.exec(`CREATE TABLE IF NOT EXISTS registered_groups (
+      jid TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      folder TEXT NOT NULL UNIQUE,
+      trigger_pattern TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      container_config TEXT,
+      requires_trigger INTEGER DEFAULT 1,
+      is_main INTEGER DEFAULT 0
+    )`);
+    d.exec(`CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      group_folder TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      schedule_type TEXT NOT NULL,
+      schedule_value TEXT NOT NULL,
+      context_mode TEXT DEFAULT 'isolated',
+      task_type TEXT DEFAULT 'scheduled',
+      next_run TEXT,
+      last_run TEXT,
+      last_result TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL
+    )`);
+    return d;
+  }
+
+  function insertHeartbeatIfAbsent(
+    d: Database.Database,
+    folder: string,
+    jid: string,
+  ): void {
+    const existing = d
+      .prepare(
+        `SELECT id FROM scheduled_tasks WHERE id = 'heartbeat-main' AND status = 'active'`,
+      )
+      .get();
+    if (!existing) {
+      const nextRun = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      d.prepare(
+        `INSERT INTO scheduled_tasks
+         (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, task_type, next_run, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        'heartbeat-main',
+        folder,
+        jid,
+        'Read HEARTBEAT.md if it exists. Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.',
+        'interval',
+        String(30 * 60 * 1000),
+        'group',
+        'heartbeat',
+        nextRun,
+        'active',
+        new Date().toISOString(),
+      );
+    }
+  }
+
+  beforeEach(() => {
+    db = createFullDb();
+  });
+
+  it('creates heartbeat-main task when registering main group', () => {
+    insertHeartbeatIfAbsent(db, 'main', 'main@g.us');
+
+    const task = db
+      .prepare(`SELECT * FROM scheduled_tasks WHERE id = 'heartbeat-main'`)
+      .get() as {
+      id: string;
+      task_type: string;
+      schedule_type: string;
+      schedule_value: string;
+      context_mode: string;
+      status: string;
+    } | undefined;
+
+    expect(task).toBeDefined();
+    expect(task!.task_type).toBe('heartbeat');
+    expect(task!.schedule_type).toBe('interval');
+    expect(task!.schedule_value).toBe(String(30 * 60 * 1000));
+    expect(task!.context_mode).toBe('group');
+    expect(task!.status).toBe('active');
+  });
+
+  it('is idempotent — does not create duplicate on re-registration', () => {
+    insertHeartbeatIfAbsent(db, 'main', 'main@g.us');
+    insertHeartbeatIfAbsent(db, 'main', 'main@g.us');
+
+    const rows = db
+      .prepare(`SELECT id FROM scheduled_tasks WHERE id = 'heartbeat-main'`)
+      .all();
+    expect(rows).toHaveLength(1);
+  });
+});
+
 describe('file templating', () => {
   it('replaces assistant name in CLAUDE.md content', () => {
     let content = '# Andy\n\nYou are Andy, a personal assistant.';

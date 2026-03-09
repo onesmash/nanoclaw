@@ -635,6 +635,71 @@ describe('schedule_task context_mode', () => {
   });
 });
 
+// --- heartbeat task_type authorization ---
+
+describe('schedule_task heartbeat authorization', () => {
+  it('main group can create a heartbeat task', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        task_type: 'heartbeat',
+        prompt: 'Read HEARTBEAT.md. If nothing needs attention, reply HEARTBEAT_OK.',
+        schedule_type: 'interval',
+        schedule_value: '1800000',
+        context_mode: 'group',
+        targetJid: 'main@g.us',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const tasks = getAllTasks();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].task_type).toBe('heartbeat');
+    expect(tasks[0].group_folder).toBe('whatsapp_main');
+  });
+
+  it('non-main group cannot create a heartbeat task', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        task_type: 'heartbeat',
+        prompt: 'HEARTBEAT_OK',
+        schedule_type: 'interval',
+        schedule_value: '1800000',
+        context_mode: 'group',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(getAllTasks()).toHaveLength(0);
+  });
+
+  it('unknown task_type defaults to scheduled', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        task_type: 'unknown-type' as any,
+        prompt: 'regular task',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const tasks = getAllTasks();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].task_type).toBe('scheduled');
+  });
+});
+
 // --- register_group success path ---
 
 describe('register_group success', () => {

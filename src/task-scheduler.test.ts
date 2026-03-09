@@ -5,7 +5,37 @@ import {
   _resetSchedulerLoopForTests,
   computeNextRun,
   startSchedulerLoop,
+  stripHeartbeatOk,
 } from './task-scheduler.js';
+
+describe('stripHeartbeatOk', () => {
+  it('returns empty string for pure HEARTBEAT_OK', () => {
+    expect(stripHeartbeatOk('HEARTBEAT_OK')).toBe('');
+  });
+
+  it('returns empty string when HEARTBEAT_OK at start with short trailing content', () => {
+    expect(stripHeartbeatOk('HEARTBEAT_OK short note')).toBe('');
+  });
+
+  it('returns empty string when HEARTBEAT_OK at end with short preceding content', () => {
+    expect(stripHeartbeatOk('all good HEARTBEAT_OK')).toBe('');
+  });
+
+  it('strips HEARTBEAT_OK and returns remainder when trailing content > 300 chars', () => {
+    const longAlert = 'A'.repeat(301);
+    const result = stripHeartbeatOk(`HEARTBEAT_OK ${longAlert}`);
+    expect(result).toBe(longAlert);
+  });
+
+  it('returns original text unchanged when no HEARTBEAT_OK present', () => {
+    const alert = 'Alert: your server is down!';
+    expect(stripHeartbeatOk(alert)).toBe(alert);
+  });
+
+  it('returns empty string for markup-wrapped HEARTBEAT_OK', () => {
+    expect(stripHeartbeatOk('<b>HEARTBEAT_OK</b>')).toBe('');
+  });
+});
 
 describe('task scheduler', () => {
   beforeEach(() => {

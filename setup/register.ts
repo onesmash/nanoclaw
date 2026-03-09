@@ -132,6 +132,61 @@ export async function run(args: string[]): Promise<void> {
     isMainInt,
   );
 
+  // Auto-create default heartbeat task for main group (idempotent)
+  if (parsed.isMain) {
+    db.exec(`CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      group_folder TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      schedule_type TEXT NOT NULL,
+      schedule_value TEXT NOT NULL,
+      context_mode TEXT DEFAULT 'isolated',
+      task_type TEXT DEFAULT 'scheduled',
+      next_run TEXT,
+      last_run TEXT,
+      last_result TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL
+    )`);
+    // Add task_type column if missing (existing DBs)
+    try {
+      db.exec(
+        `ALTER TABLE scheduled_tasks ADD COLUMN task_type TEXT DEFAULT 'scheduled'`,
+      );
+    } catch {
+      /* column already exists */
+    }
+
+    const existing = db
+      .prepare(
+        `SELECT id FROM scheduled_tasks WHERE id = 'heartbeat-main' AND status = 'active'`,
+      )
+      .get();
+
+    if (!existing) {
+      const nextRun = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      db.prepare(
+        `INSERT INTO scheduled_tasks
+         (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, task_type, next_run, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        'heartbeat-main',
+        parsed.folder,
+        parsed.jid,
+        'Read HEARTBEAT.md if it exists. Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.',
+        'interval',
+        String(30 * 60 * 1000),
+        'group',
+        'heartbeat',
+        nextRun,
+        'active',
+        timestamp,
+      );
+      logger.info('Created default heartbeat task for main group');
+    }
+  }
+
   db.close();
   logger.info('Wrote registration to SQLite');
 
