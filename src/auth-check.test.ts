@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { checkAuthentication } from './auth-check.js';
+import { checkAuthentication, checkCursorCli } from './auth-check.js';
 import * as envModule from './env.js';
 
 vi.mock('./env.js');
@@ -46,6 +46,13 @@ describe('auth-check', () => {
       // Since we can't easily mock checkClaudeAuth, just verify it returns
       // either claude_cli or none based on actual system state
       expect(['claude_cli', 'none']).toContain(result.method);
+    });
+  });
+
+  describe('checkCursorCli', () => {
+    it('should return boolean based on agent CLI availability', async () => {
+      const result = await checkCursorCli();
+      expect(typeof result).toBe('boolean');
     });
   });
 });
