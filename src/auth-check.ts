@@ -67,3 +67,16 @@ export async function checkAuthentication(): Promise<AuthenticationResult> {
 
   return { method: 'none' };
 }
+
+/**
+ * Check if Cursor agent CLI is installed and available.
+ * Used when AGENT_BACKEND=cursor — Cursor mode uses agent CLI, not Claude.
+ */
+export async function checkCursorCli(): Promise<boolean> {
+  try {
+    await execAsync('agent --version');
+    return true;
+  } catch {
+    return false;
+  }
+}
