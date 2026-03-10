@@ -310,7 +310,7 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const agentProcess = spawn('node', [AGENT_RUNNER_PATH], {
+    const agentProcess = spawn(process.execPath, [AGENT_RUNNER_PATH], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env,
     });
