@@ -119,10 +119,16 @@ After collecting answers, write `IDENTITY.md` to `groups/main/IDENTITY.md`. Skip
 
 ## 7. Mount Allowlist
 
-AskUserQuestion: Agent access to external directories?
+Ask the user:
 
-**No:** `npx tsx setup/index.ts --step mounts -- --empty`
-**Yes:** Collect paths/permissions. `npx tsx setup/index.ts --step mounts -- --json '{"allowedRoots":[...],"blockedPatterns":[],"nonMainReadOnly":true}'`
+> "Should the agent be allowed to access directories outside this project? For example: `~/projects`, `~/Documents`, a second repo you want it to read or edit. If you're not sure, it's safe to say no — you can always add paths later."
+
+**Wait for the user to answer before continuing.**
+
+**No (or unsure):** `npx tsx setup/index.ts --step mounts -- --empty`
+
+**Yes:** Ask which paths and whether they should be read-only. Then run:
+`npx tsx setup/index.ts --step mounts -- --json '{"allowedRoots":[{"path":"<dir>","readOnly":false},...],"blockedPatterns":[],"nonMainReadOnly":true}'`
 
 ## 8. Start Service
 
