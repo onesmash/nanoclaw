@@ -3,8 +3,6 @@
 
 // discord
 
-// feishu
-
 // gmail
 
 // slack
@@ -12,4 +10,7 @@
 // telegram
 
 // whatsapp
+
+// feishu
+import './feishu.js';
 

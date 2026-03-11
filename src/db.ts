@@ -128,6 +128,32 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Remove UNIQUE constraint on folder so multiple isMain groups can share 'main'.
+  // SQLite requires recreating the table to drop a constraint.
+  const tableRow = database
+    .prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='registered_groups'`,
+    )
+    .get() as { sql: string } | undefined;
+  if (tableRow?.sql?.includes('UNIQUE')) {
+    database.exec(`
+      CREATE TABLE registered_groups_new (
+        jid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        folder TEXT NOT NULL,
+        trigger_pattern TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        container_config TEXT,
+        requires_trigger INTEGER DEFAULT 1,
+        is_main INTEGER DEFAULT 0
+      );
+      INSERT INTO registered_groups_new SELECT * FROM registered_groups;
+      DROP TABLE registered_groups;
+      ALTER TABLE registered_groups_new RENAME TO registered_groups;
+      UPDATE registered_groups SET folder = 'main' WHERE is_main = 1;
+    `);
+  }
+
   // Add channel and is_group columns if they don't exist (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE chats ADD COLUMN channel TEXT`);
