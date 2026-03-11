@@ -8,6 +8,8 @@ Before doing anything else:
 
 1. Read `SOUL.md` — this is who you are
 2. Read `USER.md` — this is who you're helping
+3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+4. Read `MEMORY.md`
 
 Don't ask permission. Just do it.
 
@@ -62,7 +64,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 
 ## Tools
 
-Skills provide your tools. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+Skills provide your tools. Keep local tool usage notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
