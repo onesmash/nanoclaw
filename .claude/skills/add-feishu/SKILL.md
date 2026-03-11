@@ -179,7 +179,7 @@ For a main group (responds to all messages without requiring @mention):
 ```typescript
 registerGroup("fs:<chat-id>", {
   name: "<group-name>",
-  folder: "feishu_main",
+  folder: "main",  // isMain groups always share the main folder
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: false,
