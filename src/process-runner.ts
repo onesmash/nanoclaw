@@ -68,6 +68,8 @@ function buildEnv(
     NANOCLAW_IPC_DIR: ipcDir,
     NANOCLAW_GLOBAL_DIR: globalDir,
     NANOCLAW_IDENTITY_PATH: path.join(GROUPS_DIR, 'main', 'IDENTITY.md'),
+    NANOCLAW_SOUL_PATH: path.join(GROUPS_DIR, 'main', 'SOUL.md'),
+    NANOCLAW_USER_PATH: path.join(GROUPS_DIR, 'main', 'USER.md'),
     TZ: TIMEZONE,
     AGENT_BACKEND,
   };

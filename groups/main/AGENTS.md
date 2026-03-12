@@ -217,7 +217,6 @@ Agent runs as a Node.js subprocess with `cwd = groups/main/` (absolute host path
 | Path | Description | Access |
 |------|-------------|--------|
 | `.` | `groups/main/` — group folder | read-write |
-| `../..` | Project root | read-write |
 
 Key paths (relative to cwd):
 - `../../store/messages.db` - SQLite database (registered_groups table, chats, messages)
