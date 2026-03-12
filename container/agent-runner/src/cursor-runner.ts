@@ -17,6 +17,7 @@ import {
   applyScheduledTaskPrefix,
   drainIpcInput,
   loadSystemContext,
+  buildSystemPromptAppend,
   readStdin,
   waitForIpcMessage,
   writeOutput,
@@ -40,17 +41,41 @@ function serializeError(err: unknown): string {
 
 function buildPrompt(containerInput: ContainerInput, promptText: string): string {
   const ctx = loadSystemContext(containerInput);
-  const systemPrefix = [
-    ctx.identityContent,
-    ctx.globalClaudeMd,
-    ctx.bootstrapContent,
-    ctx.toolsContent,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-
+  const systemPrefix = buildSystemPromptAppend(ctx);
   const text = applyScheduledTaskPrefix(promptText, containerInput.isScheduledTask);
   return systemPrefix ? `${systemPrefix}\n\n---\n\n${text}` : text;
+}
+
+function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
+  const cursorDir = path.join(groupDir, '.cursor');
+  const mcpJsonPath = path.join(cursorDir, 'mcp.json');
+
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+  } catch {
+    // file doesn't exist or invalid JSON — start fresh
+  }
+
+  const mcpServers = (existing.mcpServers as Record<string, unknown>) ?? {};
+  mcpServers['nanoclaw'] = {
+    command: 'node',
+    args: [mcpServerPath],
+    env: {
+      NANOCLAW_IPC_DIR: process.env.NANOCLAW_IPC_DIR ?? '',
+      NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+      NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+    },
+  };
+  existing.mcpServers = mcpServers;
+
+  try {
+    fs.mkdirSync(cursorDir, { recursive: true });
+    fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
+    log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
+  } catch (err) {
+    log(`Failed to sync mcp.json: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function buildMcpServers(
@@ -92,9 +117,11 @@ export async function main(): Promise<void> {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
   const mcpServers = buildMcpServers(mcpServerPath, containerInput);
+  syncMcpJson(groupDir, mcpServerPath, containerInput);
 
   const spawnEnv: Record<string, string | undefined> = {
     ...process.env,
+    NANOCLAW_CHAT_JID: containerInput.chatJid,
     ...(containerInput.secrets ?? {}),
   };
 
@@ -116,6 +143,7 @@ export async function main(): Promise<void> {
   const agentProc = spawn('agent', ['acp'], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: spawnEnv as NodeJS.ProcessEnv,
+    cwd: groupDir,
   });
 
   agentProc.stderr.on('data', (chunk: Buffer) => {
