@@ -96,7 +96,9 @@ export function waitForIpcMessage(
 }
 
 export interface SystemContext {
+  soulContent?: string;
   identityContent?: string;
+  userContent?: string;
   globalClaudeMd?: string;
   bootstrapContent?: string;
   toolsContent?: string;
@@ -106,26 +108,25 @@ export interface SystemContext {
 export function loadSystemContext(containerInput: ContainerInput): SystemContext {
   const globalClaudeMdPath = path.join(process.env.NANOCLAW_GLOBAL_DIR ?? '', 'CLAUDE.md');
   const identityPath = process.env.NANOCLAW_IDENTITY_PATH;
+  const soulPath = process.env.NANOCLAW_SOUL_PATH;
+  const userPath = process.env.NANOCLAW_USER_PATH;
   const bootstrapPath = path.join(process.env.NANOCLAW_GROUP_DIR ?? '', 'BOOTSTRAP.md');
   const toolsPath = path.join(process.env.NANOCLAW_GROUP_DIR ?? '', 'TOOLS.md');
 
-  const identityContent =
-    identityPath && fs.existsSync(identityPath)
-      ? fs.readFileSync(identityPath, 'utf-8')
-      : undefined;
+  const readIfExists = (p: string | undefined) =>
+    p && fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : undefined;
+
+  const soulContent = readIfExists(soulPath);
+  const identityContent = readIfExists(identityPath);
+  const userContent = readIfExists(userPath);
 
   const globalClaudeMd =
     !containerInput.isMain && fs.existsSync(globalClaudeMdPath)
       ? fs.readFileSync(globalClaudeMdPath, 'utf-8')
       : undefined;
 
-  const bootstrapContent = fs.existsSync(bootstrapPath)
-    ? fs.readFileSync(bootstrapPath, 'utf-8')
-    : undefined;
-
-  const toolsContent = fs.existsSync(toolsPath)
-    ? fs.readFileSync(toolsPath, 'utf-8')
-    : undefined;
+  const bootstrapContent = readIfExists(bootstrapPath);
+  const toolsContent = readIfExists(toolsPath);
 
   const extraDirs: string[] = [];
   const extraBase = process.env.NANOCLAW_EXTRA_DIR;
@@ -138,7 +139,19 @@ export function loadSystemContext(containerInput: ContainerInput): SystemContext
     }
   }
 
-  return { identityContent, globalClaudeMd, bootstrapContent, toolsContent, extraDirs };
+  return { soulContent, identityContent, userContent, globalClaudeMd, bootstrapContent, toolsContent, extraDirs };
+}
+
+export function buildSystemPromptAppend(ctx: SystemContext): string | undefined {
+  const parts = [
+    ctx.soulContent,
+    ctx.identityContent,
+    ctx.userContent,
+    ctx.globalClaudeMd,
+    ctx.bootstrapContent,
+    ctx.toolsContent,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join('\n\n') : undefined;
 }
 
 export function applyScheduledTaskPrefix(prompt: string, isScheduledTask?: boolean): string {

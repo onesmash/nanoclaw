@@ -17,6 +17,7 @@ import {
   drainIpcInput,
   waitForIpcMessage,
   loadSystemContext,
+  buildSystemPromptAppend,
   applyScheduledTaskPrefix,
 } from './shared.js';
 
@@ -294,9 +295,9 @@ async function runQuery(
       resume: sessionId,
       resumeSessionAt: resumeAt,
       systemPrompt: (() => {
-        const parts = [ctx.identityContent, ctx.globalClaudeMd, ctx.bootstrapContent, ctx.toolsContent].filter(Boolean);
-        return parts.length > 0
-          ? { type: 'preset' as const, preset: 'claude_code' as const, append: parts.join('\n\n') }
+        const append = buildSystemPromptAppend(ctx);
+        return append
+          ? { type: 'preset' as const, preset: 'claude_code' as const, append }
           : undefined;
       })(),
       allowedTools: [

@@ -19,6 +19,7 @@ groups/global/*
 !groups/main/SOUL.md
 !groups/global/CLAUDE.md
 !groups/main/HEARTBEAT.md
+!groups/main/AGENTS.md
 
 # Secrets
 *.keys.json
