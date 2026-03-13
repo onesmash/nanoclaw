@@ -6,7 +6,6 @@
  */
 import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { Readable, Writable } from 'stream';
 import { fileURLToPath } from 'url';
@@ -109,12 +108,13 @@ function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: Co
       NANOCLAW_IPC_DIR: process.env.NANOCLAW_IPC_DIR ?? '',
       NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
       NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+      NANOCLAW_CHAT_JID: containerInput.chatJid,
     },
   };
 
   const targets = [
     path.join(groupDir, '.cursor', 'mcp.json'),
-    path.join(os.homedir(), '.cursor', 'mcp.json'),
+    path.join(process.env.NANOCLAW_PROJECT_ROOT ?? '', '.cursor', 'mcp.json'),
   ];
 
   for (const mcpJsonPath of targets) {
@@ -174,6 +174,8 @@ export async function main(): Promise<void> {
   const spawnEnv: Record<string, string | undefined> = {
     ...process.env,
     NANOCLAW_CHAT_JID: containerInput.chatJid,
+    NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+    NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
     ...(containerInput.secrets ?? {}),
   };
 
