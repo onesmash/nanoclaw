@@ -12,7 +12,6 @@
 // whatsapp
 
 // feishu
-import './feishu.js';
 
 // zoom
 import './zoom.js';
