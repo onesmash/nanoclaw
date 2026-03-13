@@ -216,6 +216,25 @@ export async function main(): Promise<void> {
   await waitForProxy(port);
   log(`MCP proxy ready on port ${port}`);
 
+  const mcpJsonPath = path.join(groupDir, '.cursor', 'mcp.json');
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  let watcher: fs.FSWatcher | null = null;
+  try {
+    watcher = fs.watch(mcpJsonPath, { persistent: false }, () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(async () => {
+        reloadTimer = null;
+        const newConfig = resolveConfig(groupDir, containerInput, mcpServerPath);
+        fs.writeFileSync(tmpConfigPath, JSON.stringify(newConfig));
+        log('mcp.json changed, triggering proxy reload');
+        await fetch(`http://127.0.0.1:${port}/reload`, { method: 'POST' })
+          .catch((e: unknown) => log(`reload request failed: ${e instanceof Error ? e.message : String(e)}`));
+      }, 200);
+    });
+  } catch {
+    log(`Could not watch ${mcpJsonPath}, hot-reload disabled`);
+  }
+
   // Write proxy URL to projectRoot/.cursor/mcp.json.
   // The agent CLI walks up from cwd to the git root (nanoclaw-zoom = projectRoot)
   // and uses that as its workspace, regardless of --workspace groupDir or cwd groupDir.
@@ -327,6 +346,7 @@ export async function main(): Promise<void> {
     writeOutput({ status: 'error', result: null, newSessionId: sessionId, error: errorMessage });
     process.exit(1);
   } finally {
+    watcher?.close();
     agentProc.kill();
     proxyProc.kill();
     try { fs.unlinkSync(tmpConfigPath); } catch { /* ignore */ }
