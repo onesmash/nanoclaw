@@ -4,8 +4,10 @@
  * and outputs ContainerOutput via stdout using the IPC marker protocol.
  * Uses @agentclientprotocol/sdk ClientSideConnection (JSON-RPC 2.0 over stdio).
  */
-import { spawn, spawnSync } from 'child_process';
+import { ChildProcess, spawn, spawnSync } from 'child_process';
 import fs from 'fs';
+import net from 'net';
+import os from 'os';
 import path from 'path';
 import { Readable, Writable } from 'stream';
 import { fileURLToPath } from 'url';
@@ -25,6 +27,9 @@ import {
 
 const IPC_INPUT_DIR = path.join(process.env.NANOCLAW_IPC_DIR ?? '', 'input');
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+
+const PROXY_READY_TIMEOUT_MS = 10_000;
+const PROXY_POLL_INTERVAL_MS = 200;
 
 function log(message: string): void {
   console.error(`[cursor-runner] ${message}`);
@@ -84,67 +89,71 @@ function buildPrompt(containerInput: ContainerInput, promptText: string): string
   return applyScheduledTaskPrefix(promptText, containerInput.isScheduledTask);
 }
 
-function writeMcpJson(mcpJsonPath: string, nanoclaw: Record<string, unknown>): void {
-  let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
-  } catch {
-    // file doesn't exist or invalid JSON — start fresh
-  }
+// --- MCP proxy helpers ---
 
-  const mcpServers = (existing.mcpServers as Record<string, unknown>) ?? {};
-  mcpServers['nanoclaw'] = nanoclaw;
-  existing.mcpServers = mcpServers;
+type McpConfig = { mcpServers: Record<string, unknown> };
 
-  fs.mkdirSync(path.dirname(mcpJsonPath), { recursive: true });
-  fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as net.AddressInfo).port;
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
 }
 
-function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
-  const nanoclaw = {
+function resolveConfig(groupDir: string, containerInput: ContainerInput, mcpServerPath: string): McpConfig {
+  const mcpJsonPath = path.join(groupDir, '.cursor', 'mcp.json');
+  let config: McpConfig = { mcpServers: {} };
+  try {
+    config = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+  } catch {
+    log(`No mcp.json at ${mcpJsonPath}, using nanoclaw-only default`);
+  }
+
+  // Always override the nanoclaw entry with current runtime values
+  config.mcpServers['nanoclaw'] = {
     command: process.execPath,
     args: [mcpServerPath],
     env: {
       NANOCLAW_IPC_DIR: process.env.NANOCLAW_IPC_DIR ?? '',
+      NANOCLAW_CHAT_JID: containerInput.chatJid,
       NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
       NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-      NANOCLAW_CHAT_JID: containerInput.chatJid,
     },
   };
 
-  const targets = [
-    path.join(groupDir, '.cursor', 'mcp.json'),
-    path.join(process.env.NANOCLAW_PROJECT_ROOT ?? '', '.cursor', 'mcp.json'),
-  ];
+  return config;
+}
 
-  for (const mcpJsonPath of targets) {
+function spawnProxy(port: number, configPath: string): ChildProcess {
+  const proxyPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp-proxy.js');
+  const proc = spawn(process.execPath, [proxyPath, String(port), configPath], {
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  proc.stderr!.on('data', (chunk: Buffer) => {
+    const text = chunk.toString().trim();
+    if (text) log(`proxy: ${text}`);
+  });
+  return proc;
+}
+
+async function waitForProxy(port: number): Promise<void> {
+  const deadline = Date.now() + PROXY_READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
     try {
-      writeMcpJson(mcpJsonPath, nanoclaw);
-      log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
-    } catch (err) {
-      log(`Failed to sync mcp.json at ${mcpJsonPath}: ${err instanceof Error ? err.message : String(err)}`);
+      await fetch(`http://127.0.0.1:${port}/`);
+      return;
+    } catch {
+      await new Promise(r => setTimeout(r, PROXY_POLL_INTERVAL_MS));
     }
   }
+  throw new Error(`MCP proxy on port ${port} did not become ready within ${PROXY_READY_TIMEOUT_MS}ms`);
 }
 
-function buildMcpServers(
-  mcpServerPath: string,
-  containerInput: ContainerInput,
-): acp.McpServerStdio[] {
-  return [
-    {
-      name: 'nanoclaw',
-      command: process.execPath,
-      args: [mcpServerPath],
-      env: [
-        { name: 'NANOCLAW_IPC_DIR', value: process.env.NANOCLAW_IPC_DIR ?? '' },
-        { name: 'NANOCLAW_CHAT_JID', value: containerInput.chatJid },
-        { name: 'NANOCLAW_GROUP_FOLDER', value: containerInput.groupFolder },
-        { name: 'NANOCLAW_IS_MAIN', value: containerInput.isMain ? '1' : '0' },
-      ],
-    },
-  ];
-}
+// --- main ---
 
 export async function main(): Promise<void> {
   let containerInput: ContainerInput;
@@ -163,11 +172,13 @@ export async function main(): Promise<void> {
   }
 
   const groupDir = process.env.NANOCLAW_GROUP_DIR ?? containerInput.groupFolder;
+  // Agent CLI walks up from cwd to find the git/Cursor workspace root.
+  // For groups/main (which lives inside nanoclaw-zoom), the workspace root is
+  // always nanoclaw-zoom — not groupDir. We must write .cursor/mcp.json there.
+  const projectRoot = process.env.NANOCLAW_PROJECT_ROOT ?? process.cwd();
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
-  const mcpServers = buildMcpServers(mcpServerPath, containerInput);
-  syncMcpJson(groupDir, mcpServerPath, containerInput);
-  preApproveMcps(groupDir);
+
   const ctx = loadSystemContext(containerInput);
   syncAgentsMd(groupDir, ctx);
 
@@ -193,8 +204,35 @@ export async function main(): Promise<void> {
     initialPromptText += '\n' + pending.join('\n');
   }
 
+  // Spawn MCP proxy and wait for it to be ready BEFORE writing mcp.json or spawning
+  // the agent. The agent reads mcp.json at startup and immediately tries to connect —
+  // if the proxy isn't listening yet, the connection fails and tools won't be available.
+  const port = await findFreePort();
+  const config = resolveConfig(groupDir, containerInput, mcpServerPath);
+  const tmpConfigPath = path.join(os.tmpdir(), `nanoclaw-mcp-${containerInput.groupFolder}-${port}.json`);
+  fs.writeFileSync(tmpConfigPath, JSON.stringify(config));
+  const proxyProc = spawnProxy(port, tmpConfigPath);
+  log(`Spawning MCP proxy on port ${port}`);
+  await waitForProxy(port);
+  log(`MCP proxy ready on port ${port}`);
+
+  // Write proxy URL to projectRoot/.cursor/mcp.json.
+  // The agent CLI walks up from cwd to the git root (nanoclaw-zoom = projectRoot)
+  // and uses that as its workspace, regardless of --workspace groupDir or cwd groupDir.
+  // Writing to groupDir/.cursor/mcp.json is silently ignored.
+  const cursorDir = path.join(projectRoot, '.cursor');
+  fs.mkdirSync(cursorDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(cursorDir, 'mcp.json'),
+    JSON.stringify({ mcpServers: { 'mcp-proxy': { url: `http://127.0.0.1:${port}` } } }, null, 2),
+  );
+  log(`Wrote ${projectRoot}/.cursor/mcp.json with proxy URL http://127.0.0.1:${port}`);
+
+  // Pre-approve from projectRoot (that's the workspace agent actually uses).
+  preApproveMcps(projectRoot);
+
   log('Spawning agent acp');
-  const agentProc = spawn('agent', ['acp', '--workspace', groupDir, "--approve-mcps", "--force", "--trust"], {
+  const agentProc = spawn('agent', ['acp', '--workspace', groupDir, '--approve-mcps', '--force', '--trust'], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: spawnEnv as NodeJS.ProcessEnv,
     cwd: groupDir,
@@ -236,17 +274,17 @@ export async function main(): Promise<void> {
     if (sessionId) {
       try {
         log(`Loading session: ${sessionId}`);
-        await connection.loadSession({ sessionId, cwd: groupDir, mcpServers });
+        await connection.loadSession({ sessionId, cwd: groupDir, mcpServers: [] });
       } catch (loadErr) {
         log(`Session load failed (${serializeError(loadErr)}), creating new session`);
         sessionId = undefined;
-        const r = await connection.newSession({ cwd: groupDir, mcpServers });
+        const r = await connection.newSession({ cwd: groupDir, mcpServers: [] });
         sessionId = r.sessionId;
         log(`New session created: ${sessionId}`);
       }
     } else {
       log('Creating new session');
-      const r = await connection.newSession({ cwd: groupDir, mcpServers });
+      const r = await connection.newSession({ cwd: groupDir, mcpServers: [] });
       sessionId = r.sessionId;
       log(`New session created: ${sessionId}`);
     }
@@ -290,5 +328,7 @@ export async function main(): Promise<void> {
     process.exit(1);
   } finally {
     agentProc.kill();
+    proxyProc.kill();
+    try { fs.unlinkSync(tmpConfigPath); } catch { /* ignore */ }
   }
 }
