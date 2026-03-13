@@ -64,6 +64,7 @@ function buildEnv(
         string,
       ][],
     ),
+    NANOCLAW_PROJECT_ROOT: process.cwd(),
     NANOCLAW_GROUP_DIR: groupDir,
     NANOCLAW_IPC_DIR: ipcDir,
     NANOCLAW_GLOBAL_DIR: globalDir,
