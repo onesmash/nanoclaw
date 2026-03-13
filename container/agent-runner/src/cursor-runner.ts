@@ -4,8 +4,9 @@
  * and outputs ContainerOutput via stdout using the IPC marker protocol.
  * Uses @agentclientprotocol/sdk ClientSideConnection (JSON-RPC 2.0 over stdio).
  */
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { Readable, Writable } from 'stream';
 import { fileURLToPath } from 'url';
@@ -39,17 +40,52 @@ function serializeError(err: unknown): string {
   }
 }
 
-function buildPrompt(containerInput: ContainerInput, promptText: string): string {
-  const ctx = loadSystemContext(containerInput);
-  const systemPrefix = buildSystemPromptAppend(ctx);
-  const text = applyScheduledTaskPrefix(promptText, containerInput.isScheduledTask);
-  return systemPrefix ? `${systemPrefix}\n\n---\n\n${text}` : text;
+function syncAgentsMd(groupDir: string, ctx: ReturnType<typeof loadSystemContext>): void {
+  const agentsMdPath = path.join(groupDir, 'AGENTS.md');
+  const systemContent = buildSystemPromptAppend(ctx) ?? '';
+  try {
+    fs.writeFileSync(agentsMdPath, systemContent, 'utf-8');
+    log(`Synced system context to ${agentsMdPath}`);
+  } catch (err) {
+    log(`Failed to write AGENTS.md: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
-function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
-  const cursorDir = path.join(groupDir, '.cursor');
-  const mcpJsonPath = path.join(cursorDir, 'mcp.json');
+function preApproveMcps(groupDir: string): void {
+  const listResult = spawnSync('agent', ['mcp', 'list'], {
+    cwd: groupDir,
+    encoding: 'utf-8',
+  });
 
+  const output = ((listResult.stdout ?? '') + (listResult.stderr ?? ''))
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+
+  const needsApproval = output
+    .split('\n')
+    .filter(line => line.includes('needs approval'))
+    .map(line => line.split(':')[0].trim())
+    .filter(Boolean);
+
+  if (needsApproval.length === 0) {
+    log('All MCPs already approved');
+    return;
+  }
+
+  log(`Pre-approving MCPs: ${needsApproval.join(', ')}`);
+  for (const name of needsApproval) {
+    spawnSync('agent', ['mcp', 'enable', name], {
+      cwd: groupDir,
+      encoding: 'utf-8',
+    });
+    log(`Approved MCP: ${name}`);
+  }
+}
+
+function buildPrompt(containerInput: ContainerInput, promptText: string): string {
+  return applyScheduledTaskPrefix(promptText, containerInput.isScheduledTask);
+}
+
+function writeMcpJson(mcpJsonPath: string, nanoclaw: Record<string, unknown>): void {
   let existing: Record<string, unknown> = {};
   try {
     existing = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
@@ -58,8 +94,16 @@ function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: Co
   }
 
   const mcpServers = (existing.mcpServers as Record<string, unknown>) ?? {};
-  mcpServers['nanoclaw'] = {
-    command: 'node',
+  mcpServers['nanoclaw'] = nanoclaw;
+  existing.mcpServers = mcpServers;
+
+  fs.mkdirSync(path.dirname(mcpJsonPath), { recursive: true });
+  fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
+}
+
+function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
+  const nanoclaw = {
+    command: process.execPath,
     args: [mcpServerPath],
     env: {
       NANOCLAW_IPC_DIR: process.env.NANOCLAW_IPC_DIR ?? '',
@@ -67,14 +111,19 @@ function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: Co
       NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
     },
   };
-  existing.mcpServers = mcpServers;
 
-  try {
-    fs.mkdirSync(cursorDir, { recursive: true });
-    fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
-    log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
-  } catch (err) {
-    log(`Failed to sync mcp.json: ${err instanceof Error ? err.message : String(err)}`);
+  const targets = [
+    path.join(groupDir, '.cursor', 'mcp.json'),
+    path.join(os.homedir(), '.cursor', 'mcp.json'),
+  ];
+
+  for (const mcpJsonPath of targets) {
+    try {
+      writeMcpJson(mcpJsonPath, nanoclaw);
+      log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
+    } catch (err) {
+      log(`Failed to sync mcp.json at ${mcpJsonPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 
@@ -85,7 +134,7 @@ function buildMcpServers(
   return [
     {
       name: 'nanoclaw',
-      command: 'node',
+      command: process.execPath,
       args: [mcpServerPath],
       env: [
         { name: 'NANOCLAW_IPC_DIR', value: process.env.NANOCLAW_IPC_DIR ?? '' },
@@ -118,6 +167,9 @@ export async function main(): Promise<void> {
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
   const mcpServers = buildMcpServers(mcpServerPath, containerInput);
   syncMcpJson(groupDir, mcpServerPath, containerInput);
+  preApproveMcps(groupDir);
+  const ctx = loadSystemContext(containerInput);
+  syncAgentsMd(groupDir, ctx);
 
   const spawnEnv: Record<string, string | undefined> = {
     ...process.env,
@@ -140,7 +192,7 @@ export async function main(): Promise<void> {
   }
 
   log('Spawning agent acp');
-  const agentProc = spawn('agent', ['acp'], {
+  const agentProc = spawn('agent', ['acp', '--workspace', groupDir, "--approve-mcps", "--force", "--trust"], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: spawnEnv as NodeJS.ProcessEnv,
     cwd: groupDir,
