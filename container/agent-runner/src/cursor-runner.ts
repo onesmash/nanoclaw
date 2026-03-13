@@ -224,7 +224,7 @@ export async function main(): Promise<void> {
   fs.mkdirSync(cursorDir, { recursive: true });
   fs.writeFileSync(
     path.join(cursorDir, 'mcp.json'),
-    JSON.stringify({ mcpServers: { nanoclaw: { url: `http://127.0.0.1:${port}` } } }, null, 2),
+    JSON.stringify({ mcpServers: { 'mcp-proxy': { url: `http://127.0.0.1:${port}` } } }, null, 2),
   );
   log(`Wrote ${projectRoot}/.cursor/mcp.json with proxy URL http://127.0.0.1:${port}`);
 
