@@ -70,6 +70,8 @@ function buildEnv(
     NANOCLAW_IDENTITY_PATH: path.join(GROUPS_DIR, 'main', 'IDENTITY.md'),
     NANOCLAW_SOUL_PATH: path.join(GROUPS_DIR, 'main', 'SOUL.md'),
     NANOCLAW_USER_PATH: path.join(GROUPS_DIR, 'main', 'USER.md'),
+    NANOCLAW_HEARTBEAT_PATH: path.join(GROUPS_DIR, 'main', 'HEARTBEAT.md'),
+    NANOCLAW_MEMORY_PATH: path.join(GROUPS_DIR, 'main', 'MEMORY.md'),
     TZ: TIMEZONE,
     AGENT_BACKEND,
   };
