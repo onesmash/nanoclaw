@@ -102,6 +102,8 @@ export interface SystemContext {
   globalClaudeMd?: string;
   bootstrapContent?: string;
   toolsContent?: string;
+  heartbeatContent?: string;
+  memoryContent?: string;
   extraDirs: string[];
 }
 
@@ -110,6 +112,8 @@ export function loadSystemContext(containerInput: ContainerInput): SystemContext
   const identityPath = process.env.NANOCLAW_IDENTITY_PATH;
   const soulPath = process.env.NANOCLAW_SOUL_PATH;
   const userPath = process.env.NANOCLAW_USER_PATH;
+  const heartbeatPath = process.env.NANOCLAW_HEARTBEAT_PATH;
+  const memoryPath = process.env.NANOCLAW_MEMORY_PATH;
   const bootstrapPath = path.join(process.env.NANOCLAW_GROUP_DIR ?? '', 'BOOTSTRAP.md');
   const toolsPath = path.join(process.env.NANOCLAW_GROUP_DIR ?? '', 'TOOLS.md');
 
@@ -119,6 +123,8 @@ export function loadSystemContext(containerInput: ContainerInput): SystemContext
   const soulContent = readIfExists(soulPath);
   const identityContent = readIfExists(identityPath);
   const userContent = readIfExists(userPath);
+  const heartbeatContent = readIfExists(heartbeatPath);
+  const memoryContent = readIfExists(memoryPath);
 
   const globalClaudeMd =
     !containerInput.isMain && fs.existsSync(globalClaudeMdPath)
@@ -139,17 +145,19 @@ export function loadSystemContext(containerInput: ContainerInput): SystemContext
     }
   }
 
-  return { soulContent, identityContent, userContent, globalClaudeMd, bootstrapContent, toolsContent, extraDirs };
+  return { soulContent, identityContent, userContent, globalClaudeMd, bootstrapContent, toolsContent, heartbeatContent, memoryContent, extraDirs };
 }
 
 export function buildSystemPromptAppend(ctx: SystemContext): string | undefined {
   const parts = [
+    ctx.globalClaudeMd,
+    ctx.toolsContent,
     ctx.soulContent,
     ctx.identityContent,
     ctx.userContent,
-    ctx.globalClaudeMd,
+    ctx.heartbeatContent,
     ctx.bootstrapContent,
-    ctx.toolsContent,
+    ctx.memoryContent,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join('\n\n') : undefined;
 }

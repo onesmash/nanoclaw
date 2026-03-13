@@ -10,17 +10,24 @@
 
 ## Design
 
-### File Location
+### File Locations
+
+同时写入两个路径：
 
 ```
-{groupDir}/.cursor/mcp.json
+{groupDir}/.cursor/mcp.json   # per-group workspace config
+~/.cursor/mcp.json             # Cursor 全局 user-level config
 ```
 
-每个 group 有独立的 workspace，无并发冲突。
+写入内容相同。全局配置是 "last session wins"——每次 session 启动时用当前 group 的值覆盖 `nanoclaw` 字段。这确保即使 Cursor 没有打开 group workspace，也能从全局 config 获取 nanoclaw MCP server。
+
+每个 group 有独立的 workspace，per-group 写入无并发冲突。全局 config 有理论上的并发冲突（多个 group 同时启动），但由于写入是原子的 JSON merge，最坏情况是某个 group 的值覆盖另一个，不会损坏文件。
 
 ### Write Strategy: Merge, Not Overwrite
 
-1. 读取 `{groupDir}/.cursor/mcp.json`（不存在则视为 `{}`）
+对两个目标文件均执行相同逻辑：
+
+1. 读取目标文件（不存在或 JSON 无效则视为 `{}`）
 2. 仅写入 `mcpServers.nanoclaw` 字段
 3. 其他已有 MCP server 配置保持不变
 
@@ -64,46 +71,66 @@ syncMcpJson(groupDir, mcpServerPath, containerInput);
 ### No Cleanup
 
 文件写入后不在 `finally` 中删除。原因：
-- 文件是 group workspace 私有的
-- 下次同一 group 的 session 启动时会用新值覆盖 `nanoclaw` 字段
+- per-group 文件是 workspace 私有的，下次 session 启动时会覆盖
+- 全局文件 (`~/.cursor/mcp.json`) 是用户配置，不应删除
 - 保留文件有助于调试
 
 ## Implementation
 
-### New function: `syncMcpJson`
+### Helper: `writeMcpJson`
+
+提取一个可复用的 helper，对单个文件执行 merge-write：
 
 ```ts
-function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
-  const cursorDir = path.join(groupDir, '.cursor');
-  const mcpJsonPath = path.join(cursorDir, 'mcp.json');
-
+function writeMcpJson(mcpJsonPath: string, nanoclaw: Record<string, unknown>): void {
   let existing: Record<string, unknown> = {};
   try {
     existing = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
   } catch {
     // file doesn't exist or invalid JSON — start fresh
   }
-
   const mcpServers = (existing.mcpServers as Record<string, unknown>) ?? {};
-  mcpServers['nanoclaw'] = {
+  mcpServers['nanoclaw'] = nanoclaw;
+  existing.mcpServers = mcpServers;
+  fs.mkdirSync(path.dirname(mcpJsonPath), { recursive: true });
+  fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
+}
+```
+
+### Updated: `syncMcpJson`
+
+构建一次 nanoclaw entry，写入两个目标：
+
+```ts
+function syncMcpJson(groupDir: string, mcpServerPath: string, containerInput: ContainerInput): void {
+  const nanoclaw = {
     command: 'node',
     args: [mcpServerPath],
     env: {
       NANOCLAW_IPC_DIR: process.env.NANOCLAW_IPC_DIR ?? '',
-      NANOCLAW_CHAT_JID: containerInput.chatJid,
       NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
       NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
     },
   };
 
-  existing.mcpServers = mcpServers;
+  const targets = [
+    path.join(groupDir, '.cursor', 'mcp.json'),
+    path.join(os.homedir(), '.cursor', 'mcp.json'),
+  ];
 
-  fs.mkdirSync(cursorDir, { recursive: true });
-  fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2));
-  log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
+  for (const mcpJsonPath of targets) {
+    try {
+      writeMcpJson(mcpJsonPath, nanoclaw);
+      log(`Synced nanoclaw MCP to ${mcpJsonPath}`);
+    } catch (err) {
+      log(`Failed to sync mcp.json at ${mcpJsonPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }
 ```
 
+需要在文件顶部 import `os`：`import os from 'os';`
+
 ## Files Changed
 
-- `container/agent-runner/src/cursor-runner.ts` — add `syncMcpJson`, call before spawn
+- `container/agent-runner/src/cursor-runner.ts` — 新增 `writeMcpJson` helper，更新 `syncMcpJson` 写入两个目标，添加 `import os from 'os'`
