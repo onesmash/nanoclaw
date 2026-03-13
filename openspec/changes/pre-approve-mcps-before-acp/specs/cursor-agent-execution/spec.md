@@ -1,3 +1,8 @@
+> ⚠️ **Partially superseded by `fix-cursor-mcp-workspace-root`**: `preApproveMcps` must
+> be called with `cwd: projectRoot` (git root), not `cwd: groupDir`. Running from `groupDir`
+> inside a git repo stores approvals in the wrong workspace slug. See
+> `fix-cursor-mcp-workspace-root` for the corrected cwd.
+
 ## MODIFIED Requirements
 
 ### Requirement: Auto-Approve MCP After Config Sync
