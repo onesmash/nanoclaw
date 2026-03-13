@@ -241,11 +241,20 @@ export async function main(): Promise<void> {
   // Writing to groupDir/.cursor/mcp.json is silently ignored.
   const cursorDir = path.join(projectRoot, '.cursor');
   fs.mkdirSync(cursorDir, { recursive: true });
+  const mcpJsonWritePath = path.join(cursorDir, 'mcp.json');
+  try {
+    if (fs.lstatSync(mcpJsonWritePath).isSymbolicLink()) {
+      fs.unlinkSync(mcpJsonWritePath);
+      log(`Broke symlink at ${mcpJsonWritePath}, replacing with plain file`);
+    }
+  } catch {
+    // path does not exist — no action needed
+  }
   fs.writeFileSync(
-    path.join(cursorDir, 'mcp.json'),
+    mcpJsonWritePath,
     JSON.stringify({ mcpServers: { nanoclaw: { url: `http://127.0.0.1:${port}` } } }, null, 2),
   );
-  log(`Wrote ${projectRoot}/.cursor/mcp.json with proxy URL http://127.0.0.1:${port}`);
+  log(`Wrote ${mcpJsonWritePath} with proxy URL http://127.0.0.1:${port}`);
 
   // Pre-approve from projectRoot (that's the workspace agent actually uses).
   preApproveMcps(projectRoot);
