@@ -247,13 +247,20 @@ async function runTask(
           { taskId: task.id },
           'Heartbeat skipped: HEARTBEAT.md is empty or template',
         );
-        updateTaskAfterRun(task.id, computeNextRun(task), 'Skipped: empty HEARTBEAT.md');
+        updateTaskAfterRun(
+          task.id,
+          computeNextRun(task),
+          'Skipped: empty HEARTBEAT.md',
+        );
         return;
       }
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         // Non-ENOENT read error: proceed normally (fail-open)
-        logger.debug({ taskId: task.id, err }, 'HEARTBEAT.md read error, proceeding');
+        logger.debug(
+          { taskId: task.id, err },
+          'HEARTBEAT.md read error, proceeding',
+        );
       }
     }
   }
@@ -390,7 +397,10 @@ async function runTask(
     try {
       await notifyTaskFailure(task, attempt, error, deps);
     } catch (notifyErr) {
-      logger.error({ taskId: task.id, notifyErr }, 'Failed to send task failure notification');
+      logger.error(
+        { taskId: task.id, notifyErr },
+        'Failed to send task failure notification',
+      );
     }
   } else {
     updateTask(task.id, { consecutive_errors: 0 });
