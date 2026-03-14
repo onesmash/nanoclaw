@@ -102,6 +102,15 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add consecutive_errors column if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE scheduled_tasks ADD COLUMN consecutive_errors INTEGER DEFAULT 0`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
   // Add is_bot_message column if it doesn't exist (migration for existing DBs)
   try {
     database.exec(
@@ -446,7 +455,12 @@ export function updateTask(
   updates: Partial<
     Pick<
       ScheduledTask,
-      'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status'
+      | 'prompt'
+      | 'schedule_type'
+      | 'schedule_value'
+      | 'next_run'
+      | 'status'
+      | 'consecutive_errors'
     >
   >,
 ): void {
@@ -472,6 +486,10 @@ export function updateTask(
   if (updates.status !== undefined) {
     fields.push('status = ?');
     values.push(updates.status);
+  }
+  if (updates.consecutive_errors !== undefined) {
+    fields.push('consecutive_errors = ?');
+    values.push(updates.consecutive_errors);
   }
 
   if (fields.length === 0) return;
