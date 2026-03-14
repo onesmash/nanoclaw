@@ -85,7 +85,7 @@ The container buildkit caches the build context aggressively. `--no-cache` alone
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **nanoclaw-zoom** (1511 symbols, 2481 relationships, 84 execution flows).
+This project is indexed by GitNexus as **nanoclaw-zoom** (1555 symbols, 2546 relationships, 85 execution flows).
 
 ## Always Start Here
 
