@@ -121,6 +121,44 @@ export function computeNextRun(task: ScheduledTask): string | null {
   return null;
 }
 
+const RETRY_BACKOFF_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+const MAX_RETRIES = 3;
+
+async function notifyTaskFailure(
+  task: ScheduledTask,
+  attempt: number,
+  error: string,
+  deps: SchedulerDependencies,
+): Promise<void> {
+  const taskName = task.prompt.slice(0, 50);
+  const errorSnippet = error.slice(0, 200);
+
+  let message: string;
+  if (attempt < MAX_RETRIES) {
+    const backoffSec = RETRY_BACKOFF_MS[attempt - 1] / 1000;
+    message =
+      `⚠️ Task "${taskName}" failed (attempt ${attempt}/${MAX_RETRIES})\n` +
+      `Error: ${errorSnippet}\n` +
+      `Retrying in ${backoffSec}s.`;
+  } else if (task.schedule_type === 'once') {
+    message =
+      `❌ Task "${taskName}" failed ${MAX_RETRIES} times in a row. Task paused.\n` +
+      `Error: ${errorSnippet}\n` +
+      `Let me know if you'd like to run it again.`;
+  } else {
+    const naturalNext = computeNextRun(task);
+    const nextStr = naturalNext
+      ? new Date(naturalNext).toLocaleString()
+      : 'unknown';
+    message =
+      `❌ Task "${taskName}" failed ${MAX_RETRIES} times in a row. Retries stopped.\n` +
+      `Error: ${errorSnippet}\n` +
+      `Next run scheduled for ${nextStr}. Let me know if you'd like to retry immediately.`;
+  }
+
+  await deps.sendMessage(task.chat_jid, message);
+}
+
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
@@ -209,13 +247,20 @@ async function runTask(
           { taskId: task.id },
           'Heartbeat skipped: HEARTBEAT.md is empty or template',
         );
-        updateTaskAfterRun(task.id, computeNextRun(task), 'Skipped: empty HEARTBEAT.md');
+        updateTaskAfterRun(
+          task.id,
+          computeNextRun(task),
+          'Skipped: empty HEARTBEAT.md',
+        );
         return;
       }
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         // Non-ENOENT read error: proceed normally (fail-open)
-        logger.debug({ taskId: task.id, err }, 'HEARTBEAT.md read error, proceeding');
+        logger.debug(
+          { taskId: task.id, err },
+          'HEARTBEAT.md read error, proceeding',
+        );
       }
     }
   }
@@ -325,13 +370,44 @@ async function runTask(
     error,
   });
 
-  const nextRun = computeNextRun(task);
-  const resultSummary = error
-    ? `Error: ${error}`
-    : result
-      ? result.slice(0, 200)
-      : 'Completed';
-  updateTaskAfterRun(task.id, nextRun, resultSummary);
+  if (error) {
+    const attempt = (task.consecutive_errors ?? 0) + 1;
+
+    if (attempt < MAX_RETRIES) {
+      const backoff = RETRY_BACKOFF_MS[attempt - 1];
+      const backoffNext = Date.now() + backoff;
+      const naturalNext = computeNextRun(task);
+      const nextRun = naturalNext
+        ? new Date(
+            Math.min(new Date(naturalNext).getTime(), backoffNext),
+          ).toISOString()
+        : new Date(backoffNext).toISOString();
+      updateTask(task.id, { consecutive_errors: attempt, next_run: nextRun });
+    } else {
+      if (task.schedule_type === 'once') {
+        updateTask(task.id, { status: 'paused', consecutive_errors: attempt });
+      } else {
+        updateTask(task.id, {
+          consecutive_errors: 0,
+          next_run: computeNextRun(task),
+        });
+      }
+    }
+
+    try {
+      await notifyTaskFailure(task, attempt, error, deps);
+    } catch (notifyErr) {
+      logger.error(
+        { taskId: task.id, notifyErr },
+        'Failed to send task failure notification',
+      );
+    }
+  } else {
+    updateTask(task.id, { consecutive_errors: 0 });
+    const nextRun = computeNextRun(task);
+    const resultSummary = result ? result.slice(0, 200) : 'Completed';
+    updateTaskAfterRun(task.id, nextRun, resultSummary);
+  }
 }
 
 let schedulerRunning = false;

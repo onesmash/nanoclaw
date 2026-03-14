@@ -6,6 +6,7 @@ import {
   createTask,
   getTaskById,
   logTaskRun,
+  updateTask,
   updateTaskAfterRun,
 } from './db.js';
 import { runContainerAgent } from './process-runner.js';
@@ -334,5 +335,180 @@ describe('task scheduler', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     expect(runContainerAgent).toHaveBeenCalled();
+  });
+});
+
+describe('retry logic', () => {
+  const BASE_TASK = {
+    group_folder: 'test-group',
+    chat_jid: 'test@g.us',
+    prompt: 'do something',
+    schedule_type: 'interval' as const,
+    schedule_value: '3600000',
+    context_mode: 'isolated' as const,
+    status: 'active' as const,
+    created_at: '2026-01-01T00:00:00.000Z',
+  };
+
+  const REGISTERED_GROUPS = {
+    'test@g.us': {
+      jid: 'test@g.us',
+      name: 'Test',
+      folder: 'test-group',
+      isMain: false,
+      trigger: '@bot',
+      added_at: '2026-01-01T00:00:00.000Z',
+    },
+  };
+
+  beforeEach(() => {
+    _initTestDatabase();
+    _resetSchedulerLoopForTests();
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function runScheduler(sendMessage = vi.fn().mockResolvedValue(undefined)) {
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+    startSchedulerLoop({
+      registeredGroups: () => REGISTERED_GROUPS,
+      getSessions: () => ({}),
+      queue: { enqueueTask } as any,
+      onProcess: () => {},
+      sendMessage,
+    });
+    return { sendMessage };
+  }
+
+  it('first failure increments consecutive_errors and schedules backoff retry', async () => {
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'error',
+      error: 'connection timeout',
+      result: null,
+    });
+
+    const before = Date.now();
+    createTask({
+      ...BASE_TASK,
+      id: 'retry-first',
+      next_run: new Date(before - 1000).toISOString(),
+    });
+
+    const { sendMessage } = runScheduler();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('retry-first');
+    expect(task?.consecutive_errors).toBe(1);
+    const nextRunMs = new Date(task!.next_run!).getTime();
+    expect(nextRunMs).toBeGreaterThanOrEqual(before + 30_000 - 500);
+    expect(nextRunMs).toBeLessThanOrEqual(before + 30_000 + 1000);
+    expect(sendMessage).toHaveBeenCalledWith(
+      'test@g.us',
+      expect.stringContaining('attempt 1/3'),
+    );
+  });
+
+  it('backoff is capped by naturalNext when interval is shorter than backoff', async () => {
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'error',
+      error: 'timeout',
+      result: null,
+    });
+
+    const now = Date.now();
+    createTask({
+      ...BASE_TASK,
+      id: 'retry-cap',
+      schedule_value: '10000',
+      next_run: new Date(now - 1000).toISOString(),
+    });
+
+    runScheduler();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('retry-cap');
+    const nextRunMs = new Date(task!.next_run!).getTime();
+    // naturalNext = (now - 1000) + 10000 ≈ now + 9000, backoff = now + 30000
+    expect(nextRunMs).toBeLessThan(now + 30_000);
+    expect(nextRunMs).toBeGreaterThanOrEqual(now + 7_000);
+  });
+
+  it('recurring task resets consecutive_errors and restores natural schedule after MAX_RETRIES', async () => {
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'error',
+      error: 'persistent error',
+      result: null,
+    });
+
+    const now = Date.now();
+    createTask({
+      ...BASE_TASK,
+      id: 'retry-max-recurring',
+      next_run: new Date(now - 1000).toISOString(),
+    });
+    updateTask('retry-max-recurring', { consecutive_errors: 2 });
+
+    runScheduler();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('retry-max-recurring');
+    expect(task?.consecutive_errors).toBe(0);
+    expect(task?.status).toBe('active');
+  });
+
+  it('once task is paused and consecutive_errors preserved after MAX_RETRIES', async () => {
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'error',
+      error: 'final error',
+      result: null,
+    });
+
+    const now = Date.now();
+    createTask({
+      ...BASE_TASK,
+      id: 'retry-max-once',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      next_run: new Date(now - 1000).toISOString(),
+    });
+    updateTask('retry-max-once', { consecutive_errors: 2 });
+
+    runScheduler();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('retry-max-once');
+    expect(task?.status).toBe('paused');
+    expect(task?.consecutive_errors).toBe(3);
+  });
+
+  it('success resets consecutive_errors to 0', async () => {
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'success',
+      result: 'done',
+    });
+
+    const now = Date.now();
+    createTask({
+      ...BASE_TASK,
+      id: 'retry-success-reset',
+      next_run: new Date(now - 1000).toISOString(),
+    });
+    updateTask('retry-success-reset', { consecutive_errors: 2 });
+
+    runScheduler();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('retry-success-reset');
+    expect(task?.consecutive_errors).toBe(0);
   });
 });
