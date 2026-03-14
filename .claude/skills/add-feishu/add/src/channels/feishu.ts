@@ -25,6 +25,8 @@ const MAX_MESSAGE_BYTES = 4000;
 const FEISHU_BACKOFF_CODES = new Set([99991400, 99991403, 429]);
 const WITHDRAWN_REPLY_CODES = new Set([230011, 231003]);
 
+type MentionTarget = { openId: string; name: string; key: string };
+
 // --- Core utilities ---
 
 function splitMessage(text: string): string[] {
@@ -54,11 +56,37 @@ function parseJid(jid: string): {
   return { receiveId: jid.slice('fs:'.length), receiveIdType: 'chat_id' };
 }
 
-function buildPostPayload(text: string): string {
-  return JSON.stringify({
-    zh_cn: { content: [[{ tag: 'md', text }]] },
-  });
+function buildPostPayload(
+  text: string,
+  mentionTargets?: MentionTarget[],
+): string {
+  const elements: object[] = [];
+  for (const t of mentionTargets ?? []) {
+    elements.push({ tag: 'at', user_id: t.openId });
+  }
+  elements.push({ tag: 'md', text });
+  return JSON.stringify({ zh_cn: { content: [elements] } });
 }
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripMentions(
+  text: string,
+  mentions: Array<{ key: string; name: string }>,
+): string {
+  let result = text;
+  for (const m of mentions) {
+    result = result.replace(new RegExp(escapeRegExp(m.key), 'g'), '');
+    result = result.replace(
+      new RegExp(`@${escapeRegExp(m.name)}\\s*`, 'g'),
+      '',
+    );
+  }
+  return result.replace(/ {2,}/g, ' ').trim();
+}
+
 
 // Detect Feishu API rate-limit / quota-exceeded errors from thrown errors.
 // The SDK may surface these as { code } or as Axios { response.data.code }.
@@ -282,6 +310,7 @@ export class FeishuChannel implements Channel {
   private botOpenId: string | null = null;
   private opts: FeishuChannelOpts;
   private lastMessageIdByJid: Record<string, string> = {};
+  private pendingMentionsByJid: Record<string, MentionTarget[]> = {};
   private lastReactionIdByJid: Record<
     string,
     { messageId: string; reactionId: string }
@@ -424,19 +453,57 @@ export class FeishuChannel implements Channel {
       if (quoted) content = `[Quoted: ${quoted}]\n${content}`;
     }
 
-    // Normalise @bot mention to TRIGGER_PATTERN format
-    const mentions: Array<{ id?: { open_id?: string } }> =
-      message.mentions ?? [];
-    const isBotMentioned =
-      this.botOpenId !== null &&
-      mentions.some((m) => m.id?.open_id === this.botOpenId);
+    // Normalise @bot mention to TRIGGER_PATTERN format and resolve mention names
+    const mentions: Array<{
+      key?: string;
+      id?: { open_id?: string };
+      name?: string;
+    }> = message.mentions ?? [];
+
+    const botMention = this.botOpenId
+      ? mentions.find((m) => m.id?.open_id === this.botOpenId)
+      : undefined;
+    const isBotMentioned = botMention !== undefined;
+
+    const nonBotMentions: MentionTarget[] = mentions
+      .filter(
+        (m) =>
+          m.id?.open_id !== this.botOpenId && m.id?.open_id && m.key && m.name,
+      )
+      .map((m) => ({
+        openId: m.id!.open_id!,
+        name: m.name!,
+        key: m.key!,
+      }));
+
+    // For text messages, strip Feishu mention placeholder keys and display names
+    // so the agent never sees internal identifiers like @_user_1.
+    // post messages are unaffected — parsePostContent already resolves at elements.
+    if (msgType === 'text') {
+      const allMentions = mentions.filter((m) => m.key && m.name) as Array<{
+        key: string;
+        name: string;
+      }>;
+      content = stripMentions(content, allMentions);
+    }
 
     if (isBotMentioned) {
-      // Strip <at user_id="...">Name</at> XML tags left in the content
+      // Strip <at user_id="...">Name</at> XML tags (post-format mentions)
       content = content.replace(/<at[^>]*>.*?<\/at>/g, '').trim();
+      // Strip placeholder key for text-format bot mentions (already stripped
+      // by stripMentions above, but guard in case of mixed formats)
+      if (botMention?.key) content = content.replaceAll(botMention.key, '').trim();
       if (!TRIGGER_PATTERN.test(content)) {
         content = `@${ASSISTANT_NAME} ${content}`.trim();
       }
+    }
+
+    // Mention-forward: bot + at least one other user both mentioned.
+    // Store targets for outbound auto-mention and inform the agent.
+    if (isBotMentioned && nonBotMentions.length > 0) {
+      this.pendingMentionsByJid[jid] = nonBotMentions;
+      const names = nonBotMentions.map((t) => t.name).join(', ');
+      content += `\n\n[System: Your reply will automatically @mention: ${names}. Do not write @mentions yourself.]`;
     }
 
     if (group.requiresTrigger && !TRIGGER_PATTERN.test(content)) {
@@ -466,11 +533,14 @@ export class FeishuChannel implements Channel {
 
     const { receiveId, receiveIdType } = parseJid(jid);
     const replyMsgId = this.lastMessageIdByJid[jid];
+    const mentionTargets = this.pendingMentionsByJid[jid] ?? [];
+    delete this.pendingMentionsByJid[jid];
 
     try {
       const chunks = splitMessage(text);
-      for (const chunk of chunks) {
-        const content = buildPostPayload(chunk);
+      for (let i = 0; i < chunks.length; i++) {
+        let chunkText = chunks[i];
+        const content = buildPostPayload(chunkText, i === 0 ? mentionTargets : undefined);
         if (replyMsgId) {
           const res = await this.client.im.message.reply({
             path: { message_id: replyMsgId },
