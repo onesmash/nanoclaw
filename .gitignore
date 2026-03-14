@@ -41,9 +41,21 @@ groups/global/*
 agents-sdk-docs
 .gitnexus
 
-.claude/skills/brainstorming
-.claude/skills/gitnexus
-.claude/skills/skill-creator
+# Ignore all skills by default, track only specific ones
+.claude/skills/*/
+!.claude/skills/add-*/
+!.claude/skills/convert-to-apple-container/
+!.claude/skills/cursor-agent-acp-best-practices/
+!.claude/skills/customize/
+!.claude/skills/debug/
+!.claude/skills/get-qodo-rules/
+!.claude/skills/qodo-pr-resolver/
+!.claude/skills/setup/
+!.claude/skills/update-nanoclaw/
+!.claude/skills/use-local-whisper/
+!.claude/skills/x-integration/
+.claude/rules/
+.claude/commands/
 
 .cursor/
 .agents/
