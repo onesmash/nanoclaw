@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
+import path from 'path';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
@@ -52,6 +53,31 @@ export function stripHeartbeatOk(text: string): string {
     return '';
   }
   return stripped;
+}
+
+/**
+ * Check if HEARTBEAT.md content has no actionable tasks — only whitespace,
+ * ATX comment headers (# with space), or empty list items.
+ *
+ * Returns false for null/undefined (missing file) so the heartbeat still runs.
+ * Returns true only when the file exists but carries no real instructions.
+ *
+ * Ported from openclaw src/auto-reply/heartbeat.ts.
+ */
+export function isHeartbeatContentEffectivelyEmpty(
+  content: string | null | undefined,
+): boolean {
+  if (content == null || typeof content !== 'string') return false;
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // ATX header requires space after # — "#TODO" is treated as content
+    if (/^#+(\s|$)/.test(trimmed)) continue;
+    // Empty list items: "- ", "* ", "- [ ]", "* [x]", etc.
+    if (/^[-*+]\s*(\[[\sXx]?\]\s*)?$/.test(trimmed)) continue;
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -169,6 +195,29 @@ async function runTask(
       error: `Group not found: ${task.group_folder}`,
     });
     return;
+  }
+
+  // Preflight: skip if HEARTBEAT.md exists but contains no actionable content.
+  // Avoids spawning a container and burning tokens on a no-op run.
+  // ENOENT (file absent) is not a skip — the LLM prompt already says "if it exists".
+  if (task.task_type === 'heartbeat') {
+    const heartbeatPath = path.join(groupDir, 'HEARTBEAT.md');
+    try {
+      const content = fs.readFileSync(heartbeatPath, 'utf8');
+      if (isHeartbeatContentEffectivelyEmpty(content)) {
+        logger.debug(
+          { taskId: task.id },
+          'Heartbeat skipped: HEARTBEAT.md is empty or template',
+        );
+        updateTaskAfterRun(task.id, computeNextRun(task), 'Skipped: empty HEARTBEAT.md');
+        return;
+      }
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        // Non-ENOENT read error: proceed normally (fail-open)
+        logger.debug({ taskId: task.id, err }, 'HEARTBEAT.md read error, proceeding');
+      }
+    }
   }
 
   // Update tasks snapshot for container to read (filtered by group)
