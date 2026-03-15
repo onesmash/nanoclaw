@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import Database from 'better-sqlite3';
 
@@ -355,5 +359,51 @@ describe('file templating', () => {
     }
 
     expect(envContent).toContain('ASSISTANT_NAME="Nova"');
+  });
+});
+
+describe('HEARTBEAT.md auto-init', () => {
+  let tmpDir: string;
+
+  const HEARTBEAT_TEMPLATE = `# HEARTBEAT.md
+
+# Keep this file empty (or with only comments) to skip heartbeat API calls.
+
+# Add tasks below when you want the agent to check something periodically.
+`;
+
+  function autoInitHeartbeat(groupDir: string): void {
+    const heartbeatPath = path.join(groupDir, 'HEARTBEAT.md');
+    if (!fs.existsSync(heartbeatPath)) {
+      fs.writeFileSync(heartbeatPath, HEARTBEAT_TEMPLATE, 'utf8');
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates HEARTBEAT.md with template content when file is absent', () => {
+    autoInitHeartbeat(tmpDir);
+    const heartbeatPath = path.join(tmpDir, 'HEARTBEAT.md');
+    expect(fs.existsSync(heartbeatPath)).toBe(true);
+    const content = fs.readFileSync(heartbeatPath, 'utf8');
+    expect(content).toContain('# HEARTBEAT.md');
+    expect(content).toContain('skip heartbeat API calls');
+  });
+
+  it('does not overwrite HEARTBEAT.md when it already exists', () => {
+    const heartbeatPath = path.join(tmpDir, 'HEARTBEAT.md');
+    const customContent = '# My custom tasks\n- check weather\n';
+    fs.writeFileSync(heartbeatPath, customContent, 'utf8');
+
+    autoInitHeartbeat(tmpDir);
+
+    const content = fs.readFileSync(heartbeatPath, 'utf8');
+    expect(content).toBe(customContent);
   });
 });

@@ -185,6 +185,19 @@ export async function run(args: string[]): Promise<void> {
       );
       logger.info('Created default heartbeat task for main group');
     }
+
+    // Auto-create HEARTBEAT.md from template if absent (idempotent)
+    const heartbeatPath = path.join(projectRoot, 'groups', parsed.folder, 'HEARTBEAT.md');
+    if (!fs.existsSync(heartbeatPath)) {
+      const HEARTBEAT_TEMPLATE = `# HEARTBEAT.md
+
+# Keep this file empty (or with only comments) to skip heartbeat API calls.
+
+# Add tasks below when you want the agent to check something periodically.
+`;
+      fs.writeFileSync(heartbeatPath, HEARTBEAT_TEMPLATE, 'utf8');
+      logger.info('Created default HEARTBEAT.md for main group');
+    }
   }
 
   db.close();
