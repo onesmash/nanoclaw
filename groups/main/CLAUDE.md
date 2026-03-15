@@ -66,6 +66,10 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 
 Skills provide your tools. Keep local tool usage notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
+### Skill Installation Locations
+
+Group-specific skills are installed in the group's own folder under `.claude/skills/`.
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**
