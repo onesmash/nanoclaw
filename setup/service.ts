@@ -11,6 +11,7 @@ import path from 'path';
 
 import { logger } from '../src/logger.js';
 import {
+  commandExists,
   getPlatform,
   getNodePath,
   getServiceManager,
@@ -55,6 +56,8 @@ export async function run(_args: string[]): Promise<void> {
     setupLaunchd(projectRoot, nodePath, homeDir);
   } else if (platform === 'linux') {
     setupLinux(projectRoot, nodePath, homeDir);
+  } else if (platform === 'windows') {
+    setupWindows(projectRoot, nodePath, homeDir);
   } else {
     emitStatus('SETUP_SERVICE', {
       SERVICE_TYPE: 'unknown',
@@ -300,6 +303,74 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
     UNIT_PATH: unitPath,
     SERVICE_LOADED: serviceLoaded,
     ...(dockerGroupStale ? { DOCKER_GROUP_STALE: true } : {}),
+    STATUS: 'success',
+    LOG: 'logs/setup.log',
+  });
+}
+
+function setupWindows(
+  projectRoot: string,
+  nodePath: string,
+  homeDir: string,
+): void {
+  if (!commandExists('nssm')) {
+    emitStatus('SETUP_SERVICE', {
+      SERVICE_TYPE: 'nssm',
+      NODE_PATH: nodePath,
+      PROJECT_PATH: projectRoot,
+      STATUS: 'failed',
+      ERROR: 'nssm_not_found',
+      HINT: 'Install NSSM manually from https://nssm.cc/download then re-run setup',
+      LOG: 'logs/setup.log',
+    });
+    process.exit(1);
+  }
+
+  const nssmCmd = 'nssm';
+  const logDir = path.join(projectRoot, 'logs');
+  const stdoutLog = path.join(logDir, 'nanoclaw.log');
+  const stderrLog = path.join(logDir, 'nanoclaw.error.log');
+  const entryPoint = path.join(projectRoot, 'dist', 'index.js');
+
+  logger.info('Registering nanoclaw Windows service via NSSM');
+
+  // Install service
+  execSync(`"${nssmCmd}" install nanoclaw "${nodePath}"`, { stdio: 'ignore' });
+
+  // Configure service parameters
+  execSync(`"${nssmCmd}" set nanoclaw AppParameters "${entryPoint}"`, {
+    stdio: 'ignore',
+  });
+  execSync(`"${nssmCmd}" set nanoclaw AppDirectory "${projectRoot}"`, {
+    stdio: 'ignore',
+  });
+  execSync(
+    `"${nssmCmd}" set nanoclaw AppEnvironmentExtra "HOME=${homeDir}"`,
+    { stdio: 'ignore' },
+  );
+  execSync(`"${nssmCmd}" set nanoclaw AppStdout "${stdoutLog}"`, {
+    stdio: 'ignore',
+  });
+  execSync(`"${nssmCmd}" set nanoclaw AppStderr "${stderrLog}"`, {
+    stdio: 'ignore',
+  });
+  execSync(`"${nssmCmd}" set nanoclaw Start SERVICE_AUTO_START`, {
+    stdio: 'ignore',
+  });
+
+  // Start service
+  logger.info('Starting nanoclaw service');
+  try {
+    execSync(`"${nssmCmd}" start nanoclaw`, { stdio: 'ignore' });
+    logger.info('nanoclaw service started');
+  } catch {
+    logger.warn('nssm start returned non-zero (service may already be running)');
+  }
+
+  emitStatus('SETUP_SERVICE', {
+    SERVICE_TYPE: 'nssm',
+    NODE_PATH: nodePath,
+    PROJECT_PATH: projectRoot,
     STATUS: 'success',
     LOG: 'logs/setup.log',
   });

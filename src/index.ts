@@ -510,6 +510,9 @@ async function main(): Promise<void> {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  if (process.platform === 'win32') {
+    process.on('SIGBREAK', () => shutdown('SIGBREAK'));
+  }
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {

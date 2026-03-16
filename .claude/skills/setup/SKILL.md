@@ -5,7 +5,15 @@ description: Run initial NanoClaw setup. Use when user wants to install dependen
 
 # NanoClaw Setup
 
-Run setup steps automatically. Only pause when user action is required (channel authentication, configuration choices). Setup uses `bash setup.sh` for bootstrap, then `npx tsx setup/index.ts --step <name>` for all other steps. Steps emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
+Run setup steps automatically. Only pause when user action is required (channel authentication, configuration choices). Setup uses `bash setup.sh` (macOS/Linux) or `.\setup.ps1` (Windows) for bootstrap, then `npx tsx setup/index.ts --step <name>` for all other steps. Steps emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
+
+## Prerequisites
+
+- **macOS/Linux:** Node.js >= 20, bash
+- **Windows:** Windows 10/11, Node.js >= 20, PowerShell 5.1+. If you see a script execution error before running `setup.ps1`, first allow local scripts:
+  ```powershell
+  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  ```
 
 **Principle:** When something is broken or missing, fix it. Don't tell the user to go fix it themselves unless it genuinely requires their manual action (e.g. authenticating a channel, pasting a secret token). If a dependency is missing, install it. If a service won't start, diagnose and repair. Ask the user for permission when needed, then do the work.
 
@@ -13,14 +21,20 @@ Run setup steps automatically. Only pause when user action is required (channel 
 
 ## 1. Bootstrap (Node.js + Dependencies)
 
-Run `bash setup.sh` and parse the status block.
+Detect the operating system, then run the appropriate bootstrap script and parse the status block.
 
-- If NODE_OK=false → Node.js is missing or too old. Use `AskUserQuestion: Would you like me to install Node.js 22?` If confirmed:
-  - macOS: `brew install node@22` (if brew available) or install nvm then `nvm install 22`
-  - Linux: `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs`, or nvm
-  - After installing Node, re-run `bash setup.sh`
-- If DEPS_OK=false → Read `logs/setup.log`. Try: delete `node_modules` and `package-lock.json`, re-run `bash setup.sh`. If native module build fails, install build tools (`xcode-select --install` on macOS, `build-essential` on Linux), then retry.
-- If NATIVE_OK=false → better-sqlite3 failed to load. Install build tools and re-run.
+- **Windows:** Run `.\setup.ps1` in PowerShell.
+  - `setup.ps1` checks Node.js version >= 20, installs NSSM via `winget install nssm` if not already on PATH (then refreshes PATH), runs `npm install`, and runs `npx tsx setup/index.ts`.
+  - If Node.js is missing or below version 20 → ask the user to install Node.js >= 20 from https://nodejs.org and re-run `.\setup.ps1`.
+  - If NSSM install fails (winget not available) → ask the user to install NSSM manually from https://nssm.cc/download and re-run `.\setup.ps1`.
+- **macOS/Linux:** Run `bash setup.sh` and parse the status block.
+  - If NODE_OK=false → Node.js is missing or too old. Use `AskUserQuestion: Would you like me to install Node.js 22?` If confirmed:
+    - macOS: `brew install node@22` (if brew available) or install nvm then `nvm install 22`
+    - Linux: `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs`, or nvm
+    - After installing Node, re-run `bash setup.sh`
+  - If DEPS_OK=false → Read `logs/setup.log`. Try: delete `node_modules` and `package-lock.json`, re-run `bash setup.sh`. If native module build fails, install build tools (`xcode-select --install` on macOS, `build-essential` on Linux), then retry.
+  - If NATIVE_OK=false → better-sqlite3 failed to load. Install build tools and re-run.
+
 - Record PLATFORM and IS_WSL for later steps.
 
 ## 2. Check Environment
@@ -132,9 +146,10 @@ Ask the user:
 
 ## 8. Start Service
 
-If service already running: unload first.
+If service already running: unload/stop first.
 - macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist`
 - Linux: `systemctl --user stop nanoclaw` (or `systemctl stop nanoclaw` if root)
+- Windows: `nssm stop nanoclaw`
 
 Run `npx tsx setup/index.ts --step service` and parse the status block.
 
@@ -144,14 +159,23 @@ Run `npx tsx setup/index.ts --step service` and parse the status block.
 - Read `logs/setup.log` for the error.
 - macOS: check `launchctl list | grep nanoclaw`. If PID=`-` and status non-zero, read `logs/nanoclaw.error.log`.
 - Linux: check `systemctl --user status nanoclaw`.
+- Windows: check `nssm status nanoclaw` and read `logs/nanoclaw.error.log`.
 - Re-run the service step after fixing.
+
+**Windows service management (run in an elevated PowerShell prompt):**
+```powershell
+nssm start nanoclaw
+nssm stop nanoclaw
+nssm restart nanoclaw
+nssm status nanoclaw
+```
 
 ## 9. Verify
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
 
 **If STATUS=failed, fix each:**
-- SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
+- SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup) or `nssm restart nanoclaw` (Windows)
 - SERVICE=not_found → re-run step 8
 - CREDENTIALS=missing → re-run step 4
 - CHANNEL_AUTH shows `not_found` for any channel → re-invoke that channel's skill (e.g. `/add-telegram`)
@@ -170,4 +194,6 @@ Tell user to test: send a message in their registered chat. Show: `tail -f logs/
 
 **Wrong agent backend:** Check `AGENT_BACKEND` in `.env`. Valid values: `claude` (default) or `cursor`. Restart the service after changing.
 
-**Unload service:** macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist` | Linux: `systemctl --user stop nanoclaw`
+**Unload service:** macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist` | Linux: `systemctl --user stop nanoclaw` | Windows: `nssm stop nanoclaw`
+
+**Service not starting (Windows):** Run `nssm status nanoclaw` to check current state. Review `logs/nanoclaw.error.log` for errors. If the service was never registered, re-run step 8. Restart with `nssm restart nanoclaw` after fixing any issues.

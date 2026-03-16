@@ -19,10 +19,13 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 const PROJECT_ROOT = process.cwd();
 const HOME_DIR = process.env.HOME || os.homedir();
 
+const CONFIG_DIR =
+  process.platform === 'win32'
+    ? path.join(process.env.APPDATA || os.homedir(), 'nanoclaw')
+    : path.join(HOME_DIR, '.config', 'nanoclaw');
+
 export const SENDER_ALLOWLIST_PATH = path.join(
-  HOME_DIR,
-  '.config',
-  'nanoclaw',
+  CONFIG_DIR,
   'sender-allowlist.json',
 );
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');

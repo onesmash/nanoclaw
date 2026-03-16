@@ -5,13 +5,14 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 
-export type Platform = 'macos' | 'linux' | 'unknown';
-export type ServiceManager = 'launchd' | 'systemd' | 'none';
+export type Platform = 'macos' | 'linux' | 'windows' | 'unknown';
+export type ServiceManager = 'launchd' | 'systemd' | 'nssm' | 'none';
 
 export function getPlatform(): Platform {
   const platform = os.platform();
   if (platform === 'darwin') return 'macos';
   if (platform === 'linux') return 'linux';
+  if (platform === 'win32') return 'windows';
   return 'unknown';
 }
 
@@ -95,11 +96,18 @@ export function getServiceManager(): ServiceManager {
     if (hasSystemd()) return 'systemd';
     return 'none';
   }
+  if (platform === 'windows') return 'nssm';
   return 'none';
 }
 
 export function getNodePath(): string {
   try {
+    if (process.platform === 'win32') {
+      return execSync('where.exe node', { encoding: 'utf-8' })
+        .trim()
+        .split('\n')[0]
+        .trim();
+    }
     return execSync('command -v node', { encoding: 'utf-8' }).trim();
   } catch {
     return process.execPath;
@@ -108,7 +116,11 @@ export function getNodePath(): string {
 
 export function commandExists(name: string): boolean {
   try {
-    execSync(`command -v ${name}`, { stdio: 'ignore' });
+    if (process.platform === 'win32') {
+      execSync(`where.exe ${name}`, { stdio: 'ignore' });
+    } else {
+      execSync(`command -v ${name}`, { stdio: 'ignore' });
+    }
     return true;
   } catch {
     return false;
