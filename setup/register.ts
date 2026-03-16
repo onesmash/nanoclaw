@@ -174,7 +174,7 @@ export async function run(args: string[]): Promise<void> {
         'heartbeat-main',
         parsed.folder,
         parsed.jid,
-        'Read HEARTBEAT.md if it exists. Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.',
+        'Read HEARTBEAT.md if it exists. Follow the tasks listed. Do NOT delete, clear, or overwrite this file. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.',
         'interval',
         String(30 * 60 * 1000),
         'group',
