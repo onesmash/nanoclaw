@@ -208,6 +208,13 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 Add whatever helps you do your job. This is your cheat sheet.
 `;
 
+const HEARTBEAT_MD_TEMPLATE = `# HEARTBEAT.md
+
+# Keep this file empty (or with only comments) to skip heartbeat API calls.
+
+# Add tasks below when you want the agent to check something periodically.
+`;
+
 function isUserProfileEmpty(groupDir: string): boolean {
   const userMdPath = path.join(groupDir, 'USER.md');
   if (!fs.existsSync(userMdPath)) return true;
@@ -234,6 +241,11 @@ function prepareGroupDirs(group: RegisteredGroup, isMain: boolean): void {
     const toolsMdPath = path.join(groupDir, 'TOOLS.md');
     if (!fs.existsSync(toolsMdPath)) {
       fs.writeFileSync(toolsMdPath, TOOLS_MD_TEMPLATE, 'utf-8');
+    }
+
+    const heartbeatMdPath = path.join(groupDir, 'HEARTBEAT.md');
+    if (!fs.existsSync(heartbeatMdPath)) {
+      fs.writeFileSync(heartbeatMdPath, HEARTBEAT_MD_TEMPLATE, 'utf-8');
     }
   }
 
