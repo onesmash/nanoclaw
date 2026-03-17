@@ -155,7 +155,6 @@ export function buildSystemPromptAppend(ctx: SystemContext): string | undefined 
     ctx.soulContent,
     ctx.identityContent,
     ctx.userContent,
-    ctx.heartbeatContent,
     ctx.bootstrapContent,
     ctx.memoryContent,
   ].filter(Boolean);
