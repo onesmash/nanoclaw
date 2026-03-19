@@ -57,6 +57,21 @@ agents-sdk-docs
 .claude/rules/
 .claude/commands/
 
+.codex/skills/*/
+!.codex/skills/add-*/
+!.codex/skills/convert-to-apple-container/
+!.codex/skills/cursor-agent-acp-best-practices/
+!.codex/skills/customize/
+!.codex/skills/debug/
+!.codex/skills/get-qodo-rules/
+!.codex/skills/qodo-pr-resolver/
+!.codex/skills/setup/
+!.codex/skills/update-nanoclaw/
+!.codex/skills/use-local-whisper/
+!.codex/skills/x-integration/
+.codex/rules/
+.codex/commands/
+
 .cursor/
 .agents/
 

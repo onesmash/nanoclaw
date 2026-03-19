@@ -61,7 +61,11 @@ export const TRIGGER_PATTERN = new RegExp(
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const AGENT_BACKEND: 'claude' | 'cursor' =
-  (process.env.AGENT_BACKEND || envConfig.AGENT_BACKEND) === 'cursor'
+const rawAgentBackend = process.env.AGENT_BACKEND || envConfig.AGENT_BACKEND;
+
+export const AGENT_BACKEND: 'claude' | 'cursor' | 'codex' =
+  rawAgentBackend === 'cursor'
     ? 'cursor'
-    : 'claude';
+    : rawAgentBackend === 'codex'
+      ? 'codex'
+      : 'claude';

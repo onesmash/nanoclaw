@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { checkAuthentication, checkCursorCli } from './auth-check.js';
+import {
+  checkAuthentication,
+  checkCodexAcpCli,
+  checkCursorCli,
+} from './auth-check.js';
 import * as envModule from './env.js';
 
 vi.mock('./env.js');
@@ -52,6 +56,13 @@ describe('auth-check', () => {
   describe('checkCursorCli', () => {
     it('should return boolean based on agent CLI availability', async () => {
       const result = await checkCursorCli();
+      expect(typeof result).toBe('boolean');
+    });
+  });
+
+  describe('checkCodexAcpCli', () => {
+    it('should return boolean based on codex-acp availability', async () => {
+      const result = await checkCodexAcpCli();
       expect(typeof result).toBe('boolean');
     });
   });

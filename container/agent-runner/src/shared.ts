@@ -161,6 +161,21 @@ export function buildSystemPromptAppend(ctx: SystemContext): string | undefined 
   return parts.length > 0 ? parts.join('\n\n') : undefined;
 }
 
+export function syncAgentsMd(
+  groupDir: string,
+  ctx: SystemContext,
+  log: (message: string) => void,
+): void {
+  const agentsMdPath = path.join(groupDir, 'AGENTS.md');
+  const systemContent = buildSystemPromptAppend(ctx) ?? '';
+  try {
+    fs.writeFileSync(agentsMdPath, systemContent, 'utf-8');
+    log(`Synced system context to ${agentsMdPath}`);
+  } catch (err) {
+    log(`Failed to write AGENTS.md: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export function applyScheduledTaskPrefix(prompt: string, isScheduledTask?: boolean): string {
   if (!isScheduledTask) return prompt;
   return `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;

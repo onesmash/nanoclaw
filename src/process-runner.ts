@@ -77,6 +77,11 @@ function buildEnv(
     AGENT_BACKEND,
   };
 
+  const backendEnv = readEnvFile(['CODEX_ACP_COMMAND', 'CODEX_ACP_USE_NPX']);
+  for (const [key, value] of Object.entries(backendEnv)) {
+    env[key] = value;
+  }
+
   if (isMain && group.containerConfig?.additionalMounts?.length) {
     env.NANOCLAW_EXTRA_DIR = group.containerConfig.additionalMounts[0].hostPath;
   }
@@ -95,6 +100,8 @@ function readSecrets(): Record<string, string> {
     'ANTHROPIC_API_KEY',
     'ANTHROPIC_BASE_URL',
     'ANTHROPIC_AUTH_TOKEN',
+    'OPENAI_API_KEY',
+    'CODEX_API_KEY',
   ]);
 
   // Only return credentials that actually exist and are non-empty

@@ -1,0 +1,27 @@
+skill: add-para-memory
+version: 1.0.0
+description: "Add PARA memory system (para-memory + para-memory-query) to container agents"
+core_version: 1.2.10
+adds:
+  - container/skills/para-memory/SKILL.md
+  - container/skills/para-memory/scripts/create_entity.py
+  - container/skills/para-memory/scripts/init_memory_system.py
+  - container/skills/para-memory/scripts/install_hooks.py
+  - container/skills/para-memory/scripts/save_chat_history.py
+  - container/skills/para-memory/scripts/update_entity.py
+  - container/skills/para-memory/scripts/weekly_synthesis.py
+  - container/skills/para-memory/references/schema.md
+  - container/skills/para-memory/references/qmd_setup.md
+  - container/skills/para-memory-query/SKILL.md
+  - container/skills/para-memory-query/scripts/query_entity.sh
+  - container/skills/para-memory-query/scripts/search_qmd.sh
+  - container/skills/para-memory-query/scripts/search_timeline.sh
+  - container/skills/para-memory-query/references/schema.md
+  - container/skills/para-memory-query/references/query-patterns.md
+modifies: []
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - PARA_MEMORY_ROOT
+conflicts: []
+depends: []

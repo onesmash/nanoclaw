@@ -137,7 +137,7 @@ describe('process-runner spawn behavior', () => {
     await resultPromise;
 
     expect(spawn).toHaveBeenCalledWith(
-      'node',
+      process.execPath,
       [AGENT_RUNNER_PATH],
       expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
     );
