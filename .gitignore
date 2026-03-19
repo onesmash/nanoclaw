@@ -72,8 +72,23 @@ agents-sdk-docs
 .codex/rules/
 .codex/commands/
 
+.agents/skills/*/
+!.agents/skills/add-*/
+!.agents/skills/convert-to-apple-container/
+!.agents/skills/cursor-agent-acp-best-practices/
+!.agents/skills/customize/
+!.agents/skills/debug/
+!.agents/skills/get-qodo-rules/
+!.agents/skills/qodo-pr-resolver/
+!.agents/skills/setup/
+!.agents/skills/update-nanoclaw/
+!.agents/skills/use-local-whisper/
+!.agents/skills/x-integration/
+.agents/rules/
+.agents/commands/
+
+.codex/
 .cursor/
-.agents/
 
 # Channels - only track registry and index; others come from skills
 src/channels/*
