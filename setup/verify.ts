@@ -103,7 +103,7 @@ export async function run(_args: string[]): Promise<void> {
     const envContent = fs.readFileSync(envFile, 'utf-8');
     if (
       /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(envContent) ||
-      /^AGENT_BACKEND=cursor/m.test(envContent)
+      /^AGENT_BACKEND=(cursor|codex)$/m.test(envContent)
     ) {
       credentials = 'configured';
     }

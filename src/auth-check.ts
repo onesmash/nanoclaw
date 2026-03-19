@@ -82,12 +82,12 @@ export async function checkCursorCli(): Promise<boolean> {
 }
 
 /**
- * Check if codex-acp is directly available on PATH.
- * The runtime can still fall back to npx, so this is informational only.
+ * Check if the Codex CLI is installed and available.
+ * The runtime still wires up the ACP adapter separately.
  */
-export async function checkCodexAcpCli(): Promise<boolean> {
+export async function checkCodexCli(): Promise<boolean> {
   try {
-    await execAsync('codex-acp --version');
+    await execAsync('codex --version');
     return true;
   } catch {
     return false;

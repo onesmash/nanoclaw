@@ -16,7 +16,7 @@ import {
 } from './channels/registry.js';
 import {
   checkAuthentication,
-  checkCodexAcpCli,
+  checkCodexCli,
   checkCursorCli,
 } from './auth-check.js';
 import {
@@ -481,12 +481,12 @@ async function main(): Promise<void> {
     }
     logger.info('Using Cursor agent CLI (AGENT_BACKEND=cursor)');
   } else if (AGENT_BACKEND === 'codex') {
-    const codexOk = await checkCodexAcpCli();
+    const codexOk = await checkCodexCli();
     if (codexOk) {
-      logger.info('Using Codex ACP backend (AGENT_BACKEND=codex)');
+      logger.info('Using Codex backend (AGENT_BACKEND=codex)');
     } else {
       logger.info(
-        'Using Codex ACP backend via runtime command resolution (AGENT_BACKEND=codex)',
+        'Using Codex backend; Codex CLI not found during preflight check (AGENT_BACKEND=codex)',
       );
     }
   } else {

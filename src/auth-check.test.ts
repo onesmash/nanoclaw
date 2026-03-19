@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import {
   checkAuthentication,
-  checkCodexAcpCli,
+  checkCodexCli,
   checkCursorCli,
 } from './auth-check.js';
 import * as envModule from './env.js';
@@ -60,9 +60,9 @@ describe('auth-check', () => {
     });
   });
 
-  describe('checkCodexAcpCli', () => {
-    it('should return boolean based on codex-acp availability', async () => {
-      const result = await checkCodexAcpCli();
+  describe('checkCodexCli', () => {
+    it('should return boolean based on codex CLI availability', async () => {
+      const result = await checkCodexCli();
       expect(typeof result).toBe('boolean');
     });
   });
