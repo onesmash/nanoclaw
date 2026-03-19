@@ -84,7 +84,9 @@ function buildSpawnEnv(ctx: AcpRunContext): Record<string, string | undefined> {
 const codexAdapter: AcpBackendAdapter<CodexRuntime> = {
   name: 'codex',
   async prepareRuntime(ctx) {
-    syncAgentsMd(ctx.groupDir, ctx.systemContext, log);
+    syncAgentsMd(ctx.groupDir, ctx.systemContext, log, {
+      includeMainClaudeMd: ctx.input.isMain,
+    });
 
     return {
       cwd: ctx.groupDir,

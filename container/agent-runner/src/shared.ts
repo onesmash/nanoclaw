@@ -107,6 +107,10 @@ export interface SystemContext {
   extraDirs: string[];
 }
 
+export interface SyncAgentsMdOptions {
+  includeMainClaudeMd?: boolean;
+}
+
 export function loadSystemContext(containerInput: ContainerInput): SystemContext {
   const globalClaudeMdPath = path.join(process.env.NANOCLAW_GLOBAL_DIR ?? '', 'CLAUDE.md');
   const identityPath = process.env.NANOCLAW_IDENTITY_PATH;
@@ -165,11 +169,28 @@ export function syncAgentsMd(
   groupDir: string,
   ctx: SystemContext,
   log: (message: string) => void,
+  options: SyncAgentsMdOptions = {},
 ): void {
   const agentsMdPath = path.join(groupDir, 'AGENTS.md');
   const systemContent = buildSystemPromptAppend(ctx) ?? '';
+  let localClaudeContent: string | undefined;
+
+  if (options.includeMainClaudeMd) {
+    const localClaudeMdPath = path.join(groupDir, 'CLAUDE.md');
+    if (fs.existsSync(localClaudeMdPath)) {
+      try {
+        localClaudeContent = fs.readFileSync(localClaudeMdPath, 'utf-8') || undefined;
+      } catch (err) {
+        log(
+          `Failed to read main-group CLAUDE.md: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  const content = [localClaudeContent, systemContent].filter(Boolean).join('\n\n');
   try {
-    fs.writeFileSync(agentsMdPath, systemContent, 'utf-8');
+    fs.writeFileSync(agentsMdPath, content, 'utf-8');
     log(`Synced system context to ${agentsMdPath}`);
   } catch (err) {
     log(`Failed to write AGENTS.md: ${err instanceof Error ? err.message : String(err)}`);
