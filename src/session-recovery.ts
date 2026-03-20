@@ -69,9 +69,7 @@ export function decideSessionRecovery(
     combinedError.includes('error_during_execution') ||
     combinedError.includes('Claude Code process exited');
 
-  return hasKnownClaudeResumeFailure
-    ? 'retry_without_session'
-    : 'do_not_retry';
+  return hasKnownClaudeResumeFailure ? 'retry_without_session' : 'do_not_retry';
 }
 
 async function flushBufferedErrors(
@@ -144,14 +142,20 @@ export async function runWithSessionRecovery(
 
   if (decision === 'do_not_retry') {
     options.logRecoverySkip?.(decision, firstContext);
-    await flushBufferedErrors(options.onOutput, firstState.streamedErrorOutputs);
+    await flushBufferedErrors(
+      options.onOutput,
+      firstState.streamedErrorOutputs,
+    );
     return firstOutput;
   }
 
   options.logRecoveryRetry?.(firstContext);
 
   const secondState = buildAttemptState();
-  const secondOutput = await options.runAttempt(undefined, createOnOutput(secondState));
+  const secondOutput = await options.runAttempt(
+    undefined,
+    createOnOutput(secondState),
+  );
 
   if (secondOutput.status !== 'error') {
     if (secondOutput.newSessionId) {

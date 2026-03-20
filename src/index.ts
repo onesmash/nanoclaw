@@ -312,7 +312,11 @@ async function runAgent(
       sessionId,
       onOutput,
       persistSession: persistSessionForGroup,
-      logRecoveryRetry: ({ backend, sessionId: failedSessionId, finalError }) => {
+      logRecoveryRetry: ({
+        backend,
+        sessionId: failedSessionId,
+        finalError,
+      }) => {
         logger.info(
           {
             group: group.name,
@@ -323,7 +327,10 @@ async function runAgent(
           'Retrying agent turn without persisted session after recoverable failure',
         );
       },
-      logRecoverySkip: (_decision, { backend, sessionId: failedSessionId, finalError }) => {
+      logRecoverySkip: (
+        _decision,
+        { backend, sessionId: failedSessionId, finalError },
+      ) => {
         if (!failedSessionId) return;
         logger.debug(
           {

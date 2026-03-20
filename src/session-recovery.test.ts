@@ -14,7 +14,8 @@ describe('decideSessionRecovery', () => {
         sessionId: 'session-1',
         hadAssistantOutput: false,
         attemptedRecovery: false,
-        finalError: 'Process exited with code 1: Claude Code process exited with code 1',
+        finalError:
+          'Process exited with code 1: Claude Code process exited with code 1',
         streamedErrors: ['Agent exited with subtype: error_during_execution'],
       }),
     ).toBe('retry_without_session');
@@ -62,7 +63,10 @@ describe('runWithSessionRecovery', () => {
     const onOutput = vi.fn(async (_output: ContainerOutput) => {});
     const runAttempt = vi
       .fn<
-        (sessionId: string | undefined, onOutput: (output: ContainerOutput) => Promise<void>) => Promise<ContainerOutput>
+        (
+          sessionId: string | undefined,
+          onOutput: (output: ContainerOutput) => Promise<void>,
+        ) => Promise<ContainerOutput>
       >()
       .mockImplementationOnce(async (_sessionId, onAttemptOutput) => {
         await onAttemptOutput({
@@ -73,7 +77,8 @@ describe('runWithSessionRecovery', () => {
         return {
           status: 'error',
           result: null,
-          error: 'Process exited with code 1: Claude Code process exited with code 1',
+          error:
+            'Process exited with code 1: Claude Code process exited with code 1',
         };
       })
       .mockImplementationOnce(async (_sessionId, onAttemptOutput) => {
@@ -98,8 +103,16 @@ describe('runWithSessionRecovery', () => {
       persistSession: (sessionId) => persisted.push(sessionId),
     });
 
-    expect(runAttempt).toHaveBeenNthCalledWith(1, 'poisoned-session', expect.any(Function));
-    expect(runAttempt).toHaveBeenNthCalledWith(2, undefined, expect.any(Function));
+    expect(runAttempt).toHaveBeenNthCalledWith(
+      1,
+      'poisoned-session',
+      expect.any(Function),
+    );
+    expect(runAttempt).toHaveBeenNthCalledWith(
+      2,
+      undefined,
+      expect.any(Function),
+    );
     expect(result.status).toBe('success');
     expect(persisted).toContain('replacement-session');
     expect(onOutput).toHaveBeenCalledWith(
@@ -113,7 +126,10 @@ describe('runWithSessionRecovery', () => {
   it('does not retry after streamed assistant output has started', async () => {
     const onOutput = vi.fn(async (_output: ContainerOutput) => {});
     const runAttempt = vi.fn<
-      (sessionId: string | undefined, onOutput: (output: ContainerOutput) => Promise<void>) => Promise<ContainerOutput>
+      (
+        sessionId: string | undefined,
+        onOutput: (output: ContainerOutput) => Promise<void>,
+      ) => Promise<ContainerOutput>
     >(async (_sessionId, onAttemptOutput) => {
       await onAttemptOutput({
         status: 'success',
@@ -128,7 +144,8 @@ describe('runWithSessionRecovery', () => {
       return {
         status: 'error',
         result: null,
-        error: 'Process exited with code 1: Claude Code process exited with code 1',
+        error:
+          'Process exited with code 1: Claude Code process exited with code 1',
       };
     });
 
