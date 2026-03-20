@@ -44,6 +44,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { runWithSessionRecovery } from './session-recovery.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   isSenderAllowed,
@@ -274,6 +275,10 @@ async function runAgent(
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
+  const persistSessionForGroup = (newSessionId: string) => {
+    sessions[group.folder] = newSessionId;
+    setSession(group.folder, newSessionId);
+  };
 
   // Update tasks snapshot for container to read (filtered by group)
   const tasks = getAllTasks();
@@ -300,36 +305,55 @@ async function runAgent(
     new Set(Object.keys(registeredGroups)),
   );
 
-  // Wrap onOutput to track session ID from streamed results
-  const wrappedOnOutput = onOutput
-    ? async (output: ContainerOutput) => {
-        if (output.newSessionId && output.status !== 'error') {
-          sessions[group.folder] = output.newSessionId;
-          setSession(group.folder, output.newSessionId);
-        }
-        await onOutput(output);
-      }
-    : undefined;
-
   try {
-    const output = await runContainerAgent(
-      group,
-      {
-        prompt,
-        sessionId,
-        groupFolder: group.folder,
-        chatJid,
-        isMain,
-        assistantName: ASSISTANT_NAME,
+    const output = await runWithSessionRecovery({
+      backend: AGENT_BACKEND,
+      groupFolder: group.folder,
+      sessionId,
+      onOutput,
+      persistSession: persistSessionForGroup,
+      logRecoveryRetry: ({ backend, sessionId: failedSessionId, finalError }) => {
+        logger.info(
+          {
+            group: group.name,
+            backend,
+            sessionId: failedSessionId,
+            finalError,
+          },
+          'Retrying agent turn without persisted session after recoverable failure',
+        );
       },
-      (proc, containerName) =>
-        queue.registerProcess(chatJid, proc, containerName, group.folder),
-      wrappedOnOutput,
-    );
+      logRecoverySkip: (_decision, { backend, sessionId: failedSessionId, finalError }) => {
+        if (!failedSessionId) return;
+        logger.debug(
+          {
+            group: group.name,
+            backend,
+            sessionId: failedSessionId,
+            finalError,
+          },
+          'Agent failure did not qualify for session recovery retry',
+        );
+      },
+      runAttempt: (attemptSessionId, attemptOnOutput) =>
+        runContainerAgent(
+          group,
+          {
+            prompt,
+            sessionId: attemptSessionId,
+            groupFolder: group.folder,
+            chatJid,
+            isMain,
+            assistantName: ASSISTANT_NAME,
+          },
+          (proc, containerName) =>
+            queue.registerProcess(chatJid, proc, containerName, group.folder),
+          attemptOnOutput,
+        ),
+    });
 
     if (output.newSessionId && output.status !== 'error') {
-      sessions[group.folder] = output.newSessionId;
-      setSession(group.folder, output.newSessionId);
+      persistSessionForGroup(output.newSessionId);
     }
 
     if (output.status === 'error') {

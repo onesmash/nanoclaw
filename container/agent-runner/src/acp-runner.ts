@@ -110,6 +110,9 @@ export async function runAcpAgent<
   let agentProc: ChildProcess | undefined;
   let flowFinished = false;
   let currentSessionId = containerInput.sessionId;
+  let loadedPersistedSession = false;
+  let promptStarted = false;
+  let hadPromptAssistantOutput = false;
 
   try {
     runtime = adapter.prepareRuntime
@@ -153,6 +156,7 @@ export async function runAcpAgent<
           update.content.type === 'text'
         ) {
           textBuffer += update.content.text;
+          hadPromptAssistantOutput = true;
         }
       },
       async requestPermission(params) {
@@ -184,6 +188,7 @@ export async function runAcpAgent<
                 sessionId: currentSessionId,
               };
           await connection.loadSession(params as never);
+          loadedPersistedSession = true;
         } catch (loadErr) {
           const behavior =
             adapter.onLoadSessionError?.(loadErr, ctx) ?? 'fallback_to_new';
@@ -226,6 +231,8 @@ export async function runAcpAgent<
         );
 
         textBuffer = '';
+        hadPromptAssistantOutput = false;
+        promptStarted = true;
         await connection.prompt({
           sessionId: currentSessionId,
           prompt: [{ type: 'text', text: prompt }],
@@ -266,6 +273,18 @@ export async function runAcpAgent<
   } catch (err) {
     flowFinished = true;
     const errorMessage = serializeError(err);
+    if (loadedPersistedSession && promptStarted) {
+      log(
+        adapter.name,
+        `Session recovery observability: ${JSON.stringify({
+          event: 'prompt_phase_session_adjacent_failure',
+          sessionId: currentSessionId,
+          groupFolder: containerInput.groupFolder,
+          hadAssistantOutput: hadPromptAssistantOutput,
+          error: errorMessage,
+        })}`,
+      );
+    }
     log(adapter.name, `Agent error: ${errorMessage}`);
     writeOutput({
       status: 'error',
