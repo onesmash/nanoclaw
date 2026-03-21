@@ -17,6 +17,7 @@ groups/main/*
 groups/global/*
 !groups/main/CLAUDE.md
 !groups/main/SOUL.md
+!groups/main/HEARTBEAT.md
 !groups/global/CLAUDE.md
 !groups/main/HEARTBEAT.md
 !groups/main/AGENTS.md

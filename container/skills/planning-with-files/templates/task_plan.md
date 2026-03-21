@@ -5,6 +5,14 @@
   WHEN: Create this FIRST, before starting any work. Update after each phase completes.
 -->
 
+status: active
+priority: P1
+last_touched: 2026-03-21
+<!--
+  WHAT: Portfolio metadata for this task.
+  WHY: `plans/INDEX.md` needs a consistent state model across long-running tasks.
+-->
+
 ## Goal
 <!-- 
   WHAT: One clear sentence describing what you're trying to achieve.
