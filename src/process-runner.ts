@@ -272,6 +272,10 @@ function prepareGroupDirs(group: RegisteredGroup, isMain: boolean): void {
       const srcDir = path.join(skillsSrc, skillDir);
       if (!fs.statSync(srcDir).isDirectory()) continue;
       const dstDir = path.join(skillsDst, skillDir);
+      // Replace stale links or prior copies so builtin skill sync is idempotent.
+      if (fs.existsSync(dstDir)) {
+        fs.rmSync(dstDir, { recursive: true, force: true });
+      }
       fs.cpSync(srcDir, dstDir, { recursive: true });
     }
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
+import fs from 'fs';
 import path from 'path';
 
 // Sentinel markers must match process-runner.ts
@@ -51,6 +52,7 @@ vi.mock('fs', async () => {
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
       cpSync: vi.fn(),
+      rmSync: vi.fn(),
     },
   };
 });
@@ -140,6 +142,60 @@ describe('process-runner spawn behavior', () => {
       process.execPath,
       [AGENT_RUNNER_PATH],
       expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+    );
+  });
+
+  it('replaces an existing builtin skill path before copying', async () => {
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => {
+      const value = String(filePath);
+      if (value.endsWith(path.join('container', 'skills'))) return true;
+      if (
+        value.endsWith(
+          path.join('test-group', '.claude', 'skills', 'planning-with-files'),
+        )
+      ) {
+        return true;
+      }
+      return false;
+    });
+    vi.mocked(fs.readdirSync).mockReturnValue(['planning-with-files'] as never);
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+    } as never);
+
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'Done',
+      newSessionId: 'session-2',
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    expect(fs.rmSync).toHaveBeenCalledWith(
+      path.join(
+        '/tmp/nanoclaw-test-groups',
+        'test-group',
+        '.claude',
+        'skills',
+        'planning-with-files',
+      ),
+      { recursive: true, force: true },
+    );
+    expect(fs.cpSync).toHaveBeenCalledWith(
+      path.join(process.cwd(), 'container', 'skills', 'planning-with-files'),
+      path.join(
+        '/tmp/nanoclaw-test-groups',
+        'test-group',
+        '.claude',
+        'skills',
+        'planning-with-files',
+      ),
+      { recursive: true },
     );
   });
 });
